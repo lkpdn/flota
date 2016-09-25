@@ -512,6 +512,9 @@ impl Config {
             clusters: clusters,
         }
     }
+    pub fn differ_from(&self, config: &Config) -> bool {
+        true
+    }
     pub fn is_valid(&self) -> bool {
         true
     }

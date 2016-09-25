@@ -1,5 +1,6 @@
 /target/
-Cargo.lock
-target
-DevDef.toml
-rusty-tags.vi
+/Cargo.lock
+/DevDef.toml
+/rusty-tags.vi
+/src/libvirt.rs
+/src/consts.rs

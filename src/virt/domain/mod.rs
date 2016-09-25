@@ -19,7 +19,6 @@ impl Domain {
         let mut p = Parser::new();
         p.feed_str(&desc);
         let mut in_tag = false;
-        let mut in_source = false;
         let mut sources = Vec::new();
         for event in p {
             match event.unwrap() {

@@ -1,7 +1,6 @@
 use ssh2;
 use std::net::TcpStream;
 use std::ops::Deref;
-use std::path::Path;
 use ::distro;
 use ::flota::config;
 use ::flota::template;

@@ -27,7 +27,7 @@ extern crate xml;
 
 use getopts::Options;
 use std::env;
-use std::fs::OpenOptions;
+use std::fs;
 use std::os::unix::io::AsRawFd;
 use nix::sys::signal;
 use nix::unistd::{close, dup2, fork, ForkResult, getppid, sleep};
@@ -35,12 +35,14 @@ use std::path::Path;
 use std::process;
 use std::process::Command;
 
-use ::distro::Distros;
+pub mod consts;
+use consts::*;
 
 pub mod libvirt;
 
 #[macro_use]
 pub mod util;
+use util::errors::*;
 
 pub mod flota;
 use flota::cluster::Cluster;
@@ -54,6 +56,7 @@ use virt::ResourceBlend;
 use virt::storage::pool::StoragePool;
 
 pub mod distro;
+use distro::Distros;
 
 fn print_usage(opts: Options) {
     let brief = format!("Usage: {}", *PROGNAME);
@@ -86,7 +89,7 @@ fn daemonize() {
         error!("setsid failed.");
         process::exit(1);
     }
-    match OpenOptions::new().read(true).write(true).open("/dev/null") {
+    match fs::OpenOptions::new().read(true).write(true).open("/dev/null") {
         Ok(f) => {
             let f_raw = f.as_raw_fd();
             dup2(f_raw, libc::STDIN_FILENO).expect("dup2 failed");
@@ -102,6 +105,35 @@ fn daemonize() {
 
 extern "C" fn config_reload(_: i32) {
     unsafe { CONFIG_RELOAD = true };
+}
+
+fn verify_env() -> Result<()> {
+    // selinux disabled?
+    match Command::new("getenforce")
+        .output()
+        .expect("failed to execute getenforce")
+        .stdout {
+            ref s if String::from_utf8(s.clone()).unwrap() == "Disabled\n" => {}
+            _ => {
+                panic!("selinux must be disabled.");
+        }
+    }
+
+    // data dir exists?
+    match DATA_DIR.metadata() {
+        Ok(attr) => {
+            if ! attr.is_dir() {
+                panic!("data dir ({}) does not exists.", DATA_DIR.to_str().unwrap());
+            }
+        },
+        Err(e) => {
+            panic!("{}", e);
+        }
+    }
+
+    // XXX: if dnsmasq running on hosts, check its config and make sure "bind-interfaces" uncommented.
+    // XXX: cli utils availability check
+    Ok(())
 }
 
 fn main() {
@@ -134,19 +166,8 @@ fn main() {
         return;
     }
 
-    // environment checking
-    match Command::new("getenforce")
-        .output()
-        .expect("failed to execute getenforce")
-        .stdout {
-        ref s if String::from_utf8(s.clone()).unwrap() == "Disabled\n" => {}
-        _ => {
-            panic!("{}", "selinux must be disabled.");
-        }
-    }
-    // XXX: version check
-    // XXX: if dnsmasq running on hosts, check its config and make sure "bind-interfaces" uncommented.
-    // XXX: cli utils availability check
+    // verify environment
+    verify_env().unwrap();
 
     // outermost loop
     'init: loop {
@@ -162,7 +183,7 @@ fn main() {
                                                        &config.setting.default_storage_pool_name,
                                                        &config.setting.pool_root)
             .expect("cannot make sure default storage exists and is active");
-        let default_nw = config.setting.default_network;
+        let default_nw = &config.setting.default_network;
         let default_nw_br_ip = default_nw.nth_sibling(1);
         let default_network =
             virt::network::Network::ensure_default(&conn, &default_nw_br_ip, true);
@@ -216,7 +237,10 @@ fn main() {
                 sleep(5);
                 if unsafe { CONFIG_RELOAD } {
                     unsafe { CONFIG_RELOAD = false };
-                    break 'cycle;
+                    let new_config = Config::from_toml_file(Path::new("DevDef.toml"));
+                    if config.differ_from(&new_config) {
+                        break 'cycle;
+                    }
                 }
             } else {
                 break;

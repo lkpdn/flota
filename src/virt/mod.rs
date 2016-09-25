@@ -1,5 +1,4 @@
 extern crate xml;
-use std::ffi::CStr;
 use ::util::errors::*;
 
 #[macro_export]
@@ -111,9 +110,10 @@ pub fn clean_associated(rb: &ResourceBlend) -> Result<()> {
             match network.name() {
                 "default" => (),
                 _ => {
-                    // intentionally skip error. it will be
-                    // deleted at the last moment all domains
-                    // utilising it were deleted.
+                    // Intentionally skip error becuase it will be
+                    // deleted after all, at the last moment all domains
+                    // utilising it were deleted. So as dummy nic
+                    // associated with its virtual bridge.
                     let _ = network.delete();
                 }
             }
@@ -123,9 +123,6 @@ pub fn clean_associated(rb: &ResourceBlend) -> Result<()> {
                 volume.delete();
             }
         }
-        // sadly enough dummy nic will not be deleted after its virbr is
-        // deleted, so try to do it here. We also skip error for the same
-        // reasons aforementioned on network deletion part.
     }
     Ok(())
 }

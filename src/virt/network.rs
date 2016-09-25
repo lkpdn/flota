@@ -146,5 +146,6 @@ impl Network {
     pub fn delete(&self) -> Result<()> {
         try!(self.destroy());
         self.undefine()
+        // XXX: delete dummy nic here
     }
 }

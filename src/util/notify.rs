@@ -1,6 +1,7 @@
 use ansi_term::Colour::Green;
 use libc;
-use nix::unistd::{close, dup2, fork, ForkResult, pipe};
+use nix::unistd::{close, dup2, fork, ForkResult, getppid, pipe};
+use nix::sys::signal;
 use notify;
 use notify::{RecommendedWatcher, Watcher};
 use std::fs::File;
@@ -10,6 +11,31 @@ use std::sync::mpsc::channel;
 
 use ::util::errors::*;
 
+// fork and return child pid
+pub fn config_hup(path: &Path) -> Result<i32> {
+    match fork().expect("fork failed") {
+        ForkResult::Parent { child } => {
+            Ok(child)
+        }
+        ForkResult::Child => {
+            let (tx, rx) = channel();
+            let mut watcher: RecommendedWatcher = try!(Watcher::new(tx));
+            try!(watcher.watch(path.to_str().unwrap()));
+            loop {
+                match rx.recv() {
+                    Ok(notify::Event { path: _, op: _ }) => {
+                        let _ = signal::kill(getppid(), signal::SIGHUP);
+                    }
+                    Err(e) => {
+                        error!("{}", e);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// fork and return child pid
 pub fn tailf_background(path: &Path) -> Result<i32> {
     let (r, w) = pipe().unwrap();
     match fork().expect("fork failed") {
