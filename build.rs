@@ -28,12 +28,24 @@ fn gen_consts() {
     let consts_rs = "./src/consts.rs";
     if let Ok(mut f) = File::create(consts_rs) {
         write!(&mut f, "\
-            use std::path::PathBuf;\n\
+            use std::env;\n\
+            use std::path::{{Path, PathBuf}};\n\
             \n\
             lazy_static! {{\n\
+                pub static ref PROGNAME: String = {{\n\
+                    let args: Vec<String> = env::args().collect();\n\
+                    let program = args[0].clone();\n\
+                    Path::new(&program)\n\
+                      .file_name().unwrap()\n\
+                      .to_str().unwrap().to_string()\n\
+                }};\n\
                 pub static ref DATA_DIR: PathBuf = PathBuf::from(\n\
-                    format!(\"{}{{}}\", *::PROGNAME).as_str());\n\
-                pub static ref CONFIG_HISTORY_DIR: PathBuf = DATA_DIR.join(\"/config/history\");\n\
+                    format!(\"{}{{}}\", *PROGNAME).as_str());\n\
+                pub static ref CONFIG_HISTORY_DIR: PathBuf = DATA_DIR.join(\"config/history\");\n\
+                pub static ref LOGFILE: PathBuf = PathBuf::from(\n\
+                    format!(\"/var/log/{{}}.log\", *PROGNAME).as_str());\n\
+                pub static ref LOGERROR: PathBuf = PathBuf::from(\n\
+                    format!(\"/var/log/{{}}.error.log\", *PROGNAME).as_str());\n\
             }}", data_dir).unwrap();
     } else { panic!("cannot open file") }
     if let Ok(d) = fs::metadata(&data_dir) {

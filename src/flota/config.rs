@@ -1,13 +1,17 @@
+use std::fs;
+use rustc_serialize::Encodable;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use time;
 use toml;
-use url::Url;
+use ::consts::*;
 use ::util::errors::*;
 use ::util::ipv4::IPv4;
+use ::util::url::Url;
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, RustcEncodable)]
 pub struct Setting {
     /// Hypervisor uri to connect.
     /// _no default value_
@@ -42,7 +46,7 @@ impl Default for Setting {
             hypervisor: "qemu:///system".to_string(),
             pool_root: "/tmp".to_string(),
             default_network: IPv4::from_cidr_notation("203.0.113.0/24").unwrap(),
-            default_storage_pool_name: format!("_{}", *::PROGNAME),
+            default_storage_pool_name: format!("_{}", *PROGNAME),
             persistent: true,
             delete_unused_template: true,
             daemonized: false,
@@ -78,7 +82,7 @@ enum UnattendedInstallation {
     KickstartFile(PathBuf),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, RustcEncodable)]
 pub enum Ingredient {
     /// distro + arch (+ unattended)
     OffTheShelf {
@@ -140,7 +144,7 @@ impl Ingredient {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, RustcEncodable)]
 pub struct Template {
     /// Template name.
     pub name: String,
@@ -171,7 +175,7 @@ impl Template {
             .map(|val| val.as_str().unwrap().to_owned());
         let mgmt_user = tml.lookup("mgmt_user")
             .map(|val| val.as_str().unwrap().to_owned())
-            .unwrap_or(format!("admin_{}", *::PROGNAME));
+            .unwrap_or(format!("admin_{}", *PROGNAME));
         let mgmt_user_ssh_private_key = tml.lookup("mgmt_user_ssh_private_key")
             .map(|val| PathBuf::from(val.as_str().unwrap()))
             .unwrap_or(PathBuf::from(format!("/home/{}/.ssh/id_rsa", mgmt_user)));
@@ -186,7 +190,7 @@ impl Template {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, RustcEncodable)]
 pub struct Exec {
     /// Hostname on which this Exec will be executed.
     pub hostname: String,
@@ -236,7 +240,7 @@ impl Exec {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, RustcEncodable)]
 pub struct HostInterface {
     /// Network interface dev name on guest side.
     pub dev: String,
@@ -259,7 +263,7 @@ impl HostInterface {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, RustcEncodable)]
 pub struct Host {
     /// Hostname.
     pub hostname: String,
@@ -363,7 +367,7 @@ impl Host {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, RustcEncodable)]
 pub struct Cluster {
     /// Cluster name arbitrarily chosen.
     pub name: String,
@@ -450,7 +454,7 @@ impl Cluster {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, RustcEncodable)]
 pub struct Config {
     pub setting: Setting,
     pub templates: Vec<Template>,
@@ -512,10 +516,40 @@ impl Config {
             clusters: clusters,
         }
     }
-    pub fn differ_from(&self, config: &Config) -> bool {
-        true
+    pub fn as_toml(&self) -> toml::Value {
+        toml::encode(self)
     }
-    pub fn is_valid(&self) -> bool {
-        true
+    pub fn differ_from(&self, config: &Config) -> bool {
+        self.as_toml() == config.as_toml()
+    }
+    pub fn snapshot(&self) -> Result<()> {
+        let save_to = ::consts::CONFIG_HISTORY_DIR.join(format!(
+          "config-{}", time::now().to_timespec().sec).as_str());
+        if let Ok(mut f) = File::create(save_to.to_str().unwrap()) {
+            write!(&mut f, "{}", toml::encode_str(self)).map_err(|e| e.into())
+        } else {
+            Err("cannot take snapshot of config".into())
+        }
+    }
+    pub fn latest_saved_config() -> Option<Config> {
+        if let Some(entries) = fs::read_dir(
+            ::consts::CONFIG_HISTORY_DIR.to_str().unwrap()
+        ).ok() {
+            let mut dentries = entries.map(|v| v.unwrap())
+                                      .collect::<Vec<fs::DirEntry>>();
+            dentries.sort_by(|d1, d2| {
+                    let m1 = d1.metadata().unwrap().modified().unwrap();
+                    let m2 = d2.metadata().unwrap().modified().unwrap();
+                    m1.cmp(&m2)
+            });
+            if let Some(entry) = dentries.first() {
+                Some(Self::from_toml_file(::consts::CONFIG_HISTORY_DIR.join(
+                            entry.file_name()).as_path()))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 }

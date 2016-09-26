@@ -70,7 +70,7 @@ impl<T: CentOS6> distro::InvasiveAdaption for T {
             }
         }
 
-    // get mac address which belongs to the default network, i.e. mgmt interface mac.
+        // get mac address which belongs to the default network, i.e. mgmt interface mac.
         if let Some(mac) = domain.get_mac_of_if_in_network(match template.network() {
             Some(ref n) => n.name().to_owned(),
             None => panic!("a"),
@@ -80,6 +80,7 @@ impl<T: CentOS6> distro::InvasiveAdaption for T {
                     let cfg = format!("\
                                 DEVICE=eth999\n\
                                 BOOTPROTO=dhcp\n\
+                                PERSISTENT_DHCLIENT=1\n\
                                 HWADDR={}\n\
                                 IPV6INIT=\"no\"\n\
                                 MTU=\"1500\"\n\
@@ -101,12 +102,12 @@ impl<T: CentOS6> distro::InvasiveAdaption for T {
             panic!("would not panic!")
         }
 
-    // reload.
+        // reload.
         match sess.channel_session() {
             Ok(mut channel) => {
-    // XXX: one of the ugliest part human being ever seen.
-    // the reason iproute2 are used instead of network service utility or
-    // direct ifconfig is that in the previous part we changed ifcfgs online.
+                // XXX: one of the ugliest part human being ever seen.
+                // the reason iproute2 are used instead of network service utility or
+                // direct ifconfig is that in the previous part we changed ifcfgs online.
                 channel.exec(r#"sudo nohup sh -c '
                    ls /sys/class/net | xargs -i ip l set dev {} down;
                    cat /dev/null > /etc/udev/rules.d/70-persistent-net.rules;

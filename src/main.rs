@@ -17,6 +17,7 @@ extern crate nix;
 extern crate notify;
 #[macro_use]
 extern crate quick_error;
+extern crate rustc_serialize;
 extern crate ssh2;
 extern crate term;
 extern crate time;
@@ -43,6 +44,7 @@ pub mod libvirt;
 #[macro_use]
 pub mod util;
 use util::errors::*;
+use util::notify::config_hup;
 
 pub mod flota;
 use flota::cluster::Cluster;
@@ -63,15 +65,6 @@ fn print_usage(opts: Options) {
     print!("{}", opts.usage(&brief));
 }
 
-lazy_static! {
-    pub static ref PROGNAME: String = {
-        let args: Vec<String> = env::args().collect();
-        let program = args[0].clone();
-        Path::new(&program)
-          .file_name().unwrap()
-          .to_str().unwrap().to_string()
-    };
-}
 static mut CONFIG_RELOAD: bool = false;
 
 #[allow(unused_variables)]
@@ -89,17 +82,21 @@ fn daemonize() {
         error!("setsid failed.");
         process::exit(1);
     }
-    match fs::OpenOptions::new().read(true).write(true).open("/dev/null") {
-        Ok(f) => {
+    match (fs::OpenOptions::new().read(true).write(true).open("/dev/null"),
+           fs::OpenOptions::new().read(true).write(true).create(true).open(LOGFILE.as_os_str()),
+           fs::OpenOptions::new().read(true).write(true).create(true).open(LOGERROR.as_os_str())) {
+        (Ok(n), Ok(f), Ok(e)) => {
+            let n_raw = n.as_raw_fd();
             let f_raw = f.as_raw_fd();
-            dup2(f_raw, libc::STDIN_FILENO).expect("dup2 failed");
+            let e_raw = e.as_raw_fd();
+            dup2(n_raw, libc::STDIN_FILENO).expect("dup2 failed");
             dup2(f_raw, libc::STDOUT_FILENO).expect("dup2 failed");
-            dup2(f_raw, libc::STDERR_FILENO).expect("dup2 failed");
-            if f_raw > 2 {
-                close(f_raw).expect("cannot close fd opened for /dev/null");
+            dup2(e_raw, libc::STDERR_FILENO).expect("dup2 failed");
+            if n_raw > 2 {
+                close(n_raw).expect("cannot close fd opened for /dev/null");
             }
-        }
-        Err(e) => panic!("cannot open /dev/null ({})", e),
+        },
+        _ => panic!("failed to daemonize. dup2 failed.")
     }
 }
 
@@ -200,6 +197,7 @@ fn main() {
                 signal::sigaction(signal::SIGHUP, &hup_action)
                     .expect("sigaction for SIGHUP failed");
             }
+            let _child = config_hup(Path::new("DevDef.toml")).expect("failed to setup config_hup");
         }
 
         // unless some intentional signal received,
@@ -239,6 +237,7 @@ fn main() {
                     unsafe { CONFIG_RELOAD = false };
                     let new_config = Config::from_toml_file(Path::new("DevDef.toml"));
                     if config.differ_from(&new_config) {
+                        new_config.snapshot().expect("cannot save config snapshot");
                         break 'cycle;
                     }
                 }
