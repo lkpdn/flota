@@ -3,6 +3,7 @@
 extern crate ansi_term;
 extern crate bit_vec;
 extern crate crypto;
+extern crate difference;
 extern crate env_logger;
 #[macro_use]
 extern crate error_chain;
@@ -140,6 +141,8 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let mut opts = Options::new();
     opts.optflag("h", "help", "print this help menu");
+    opts.optopt("c", "config", format!(
+            "config toml file (DEFAULT: /etc/flota.toml)").as_str(), "FILE");
     opts.optflag("", "clean", "remove all templates and clusters/hosts.");
     opts.optflag("", "reset", "reset all.");
     let matches = match opts.parse(&args[1..]) {
@@ -154,6 +157,10 @@ fn main() {
         print_usage(opts);
         return;
     }
+    let config_path = match matches.opt_str("c") {
+        Some(c) => { c },
+        None => { "/etc/flota.toml".to_string() }
+    };
     if matches.opt_present("reset") {
         println!("would reset");
         return;
@@ -169,7 +176,7 @@ fn main() {
     // outermost loop
     'init: loop {
         // read toml
-        let config = Config::from_toml_file(Path::new("DevDef.toml"));
+        let config = Config::from_toml_file(Path::new(&config_path));
         debug!("{:#?}", config);
 
         // set up main connection
@@ -197,7 +204,7 @@ fn main() {
                 signal::sigaction(signal::SIGHUP, &hup_action)
                     .expect("sigaction for SIGHUP failed");
             }
-            let _child = config_hup(Path::new("DevDef.toml")).expect("failed to setup config_hup");
+            let _child = config_hup(Path::new(&config_path)).expect("failed to setup config_hup");
         }
 
         // unless some intentional signal received,
@@ -235,7 +242,7 @@ fn main() {
                 sleep(5);
                 if unsafe { CONFIG_RELOAD } {
                     unsafe { CONFIG_RELOAD = false };
-                    let new_config = Config::from_toml_file(Path::new("DevDef.toml"));
+                    let new_config = Config::from_toml_file(Path::new(&config_path));
                     if config.differ_from(&new_config) {
                         new_config.snapshot().expect("cannot save config snapshot");
                         break 'cycle;

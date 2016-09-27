@@ -57,6 +57,7 @@ panic = 'unwind'
 [dependencies]
 ansi_term = "0.9"
 bit-vec = "0.4.3"
+difference = "0.4"
 env_logger = "0.3"
 error-chain = "0.5"
 getopts = "0.2"

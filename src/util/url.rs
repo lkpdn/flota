@@ -25,3 +25,24 @@ impl Url {
         U::parse(input).map(|u| Url(u))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use toml::{Encoder, Value};
+    use rustc_serialize::Encodable;
+    use url;
+    use super::Url;
+
+    #[derive(RustcEncodable)]
+    struct TestUrlStruct { url: Url }
+    #[test]
+    fn test_url() {
+        let mut e = Encoder::new();
+        let test_url = "ftp://example.com/foo";
+        let url = Url(url::Url::parse(&test_url).unwrap());
+        let test_url_struct = TestUrlStruct { url: url };
+        test_url_struct.encode(&mut e).unwrap();
+        assert_eq!(e.toml.get(&"url".to_string()),
+                   Some(&Value::String(test_url.to_string())));
+    }
+}

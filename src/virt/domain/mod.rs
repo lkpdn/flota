@@ -140,7 +140,11 @@ impl Domain {
                                                   CString::new(hostname.to_owned())
                                                       .unwrap()
                                                       .as_ptr()) {
-                p if !p.is_null() => p,
+                p if !p.is_null() => {
+                    if virDomainReboot(p, 0) != 0 {
+                        return Err("domain already exists but failed to reboot".into())
+                    } else { p }
+                },
                 _ => {
                     let mem_mb = 768;
                     let mut x = xE!("domain", type => "kvm");
@@ -169,14 +173,10 @@ impl Domain {
                     x_dev.tag(xE!("disk", type => "volume", device => "disk"))
                         .tag_stay(xE!("driver", name => "qemu", type => "qed"))
                         .tag_stay(xE!("source",
-                        pool => vol.get_pool().name(),
-                        volume => vol.name()
-                      ))
+                          pool => vol.get_pool().name(),
+                          volume => vol.name()
+                        ))
                         .tag_stay(xE!("target", dev => "hda", bus => "ide"));
-                    // default network interface
-                    // /x_dev.tag(xE!("interface", type => "user"))
-                    // /  .tag_stay(xE!("mac", address => "00:11:22:33:44:55"))
-                    // /  .tag_stay(xE!("source", network => network.get_name()));
                     for (_dev, o_ip) in interfaces {
                         let mut br_ip = o_ip.nw_addr();
                         br_ip.incr_node_id().unwrap();
@@ -188,8 +188,6 @@ impl Domain {
                         // chosen in guest side, it wouldn't do much harm.
                         x_dev.tag(xE!("interface", type => "network"))
                           .tag_stay(xE!("source", network => nw.name()))
-               //           .tag_stay(xE!("model", type => "i82559c"))
-               //           .tag_stay(xE!("mac", address => "00:11:22:33:44:56"))
                           .tag_stay(xE!("ip",
                             address => ip.as_str(),
                             prefix => prefix.as_str()
@@ -226,7 +224,6 @@ impl Domain {
             }
             if virDomainCreate(dom) < 0 {
                 Err("failed to create domain".into())
-                //    hostname)))
             } else {
                 Ok(Domain { raw: dom })
             }

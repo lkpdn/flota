@@ -63,6 +63,8 @@ fn download_iso_md5checked(local_path: &Path) -> Result<()> {
     let mut buffer = String::new();
     md5_file.read_to_string(&mut buffer).unwrap();
     let md5s = buffer.lines()
+        // the md5sum.txt is assumed to have multiple entries
+        // for each type of iso files.
         .filter(|l| l.ends_with(&iso_filename))
         .map(|l| l.split(' ').collect::<Vec<&str>>()[0])
         .collect::<Vec<_>>();
@@ -75,11 +77,15 @@ fn download_iso_md5checked(local_path: &Path) -> Result<()> {
 }
 
 fn download_vmlinuz(local_path: &Path) -> Result<()> {
-    download_file(&VMLINUZ, local_path)
+    if ! local_path.exists() {
+        download_file(&VMLINUZ, local_path)
+    } else { Ok(()) }
 }
 
 fn download_initrd(local_path: &Path) -> Result<()> {
-    download_file(&INITRD, local_path)
+    if ! local_path.exists() {
+        download_file(&INITRD, local_path)
+    } else { Ok(()) }
 }
 
 #[allow(non_camel_case_types)]

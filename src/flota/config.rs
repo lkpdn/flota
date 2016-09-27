@@ -1,7 +1,6 @@
 use std::fs;
-use rustc_serialize::Encodable;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use time;
 use toml;

@@ -1,4 +1,3 @@
-use ansi_term::Colour::Green;
 use libc;
 use nix::unistd::{close, dup2, fork, ForkResult, getppid, pipe};
 use nix::sys::signal;
@@ -14,9 +13,7 @@ use ::util::errors::*;
 // fork and return child pid
 pub fn config_hup(path: &Path) -> Result<i32> {
     match fork().expect("fork failed") {
-        ForkResult::Parent { child } => {
-            Ok(child)
-        }
+        ForkResult::Parent { child } => Ok(child),
         ForkResult::Child => {
             let (tx, rx) = channel();
             let mut watcher: RecommendedWatcher = try!(Watcher::new(tx));
@@ -58,9 +55,7 @@ pub fn tailf_background(path: &Path) -> Result<i32> {
                         if let Err(_) = f.read_to_end(&mut buffer) {
                             continue;
                         }
-                        if let Ok(s) = String::from_utf8(buffer) {
-                            print!("{}", Green.paint(s));
-                        }
+                        print!("{}", unsafe { String::from_utf8_unchecked(buffer) });
                     }
                     Err(e) => {
                         error!("{}", e);

@@ -120,7 +120,7 @@ pub fn clean_associated(rb: &ResourceBlend) -> Result<()> {
         }
         for vol_path in vol_paths.iter() {
             if let Some(volume) = Volume::from_path(rb.conn(), &vol_path) {
-                volume.delete();
+                let _ = volume.delete();
             }
         }
     }
