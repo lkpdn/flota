@@ -1,11 +1,6 @@
-use crypto::digest::Digest;
-use crypto::md5::Md5;
 use ssh2;
 use ssh2::{CheckResult, HostKeyType, KnownHostFileKind, KnownHostKeyFormat};
 use std::env;
-use std::fs::File;
-use std::io::prelude::*;
-use std::io::BufReader;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use url::Url;
@@ -13,6 +8,7 @@ use ::consts::*;
 
 pub mod errors;
 pub mod ipv4;
+pub mod md5sum;
 pub mod notify;
 pub mod url;
 
@@ -141,44 +137,6 @@ pub fn download_file<'a>(remote_url: &Url, local_path: &Path) -> Result<()> {
     }
 }
 
-pub fn download_file_md5checked(remote_url: &Url, local_path: &Path, md5: &str) -> Result<()> {
-    if !local_path.exists() {
-        if let Err(e) = download_file(remote_url, local_path) {
-            error!("{}", e);
-            return Err(format!("failed to download {} [{}]", remote_url.as_str(), e).into());
-        }
-    }
-    match compare_md5(local_path, md5) {
-        Ok(true) => Ok(()),
-        Ok(false) => Err("md5 unmatch error".into()),
-        Err(e) => Err(e),
-    }
-}
-
-pub fn compare_md5(local_path: &Path, md5: &str) -> Result<bool> {
-    match File::open(local_path.to_str().unwrap()) {
-        Ok(fl) => {
-            let chunk = 10240;
-            let mut reader = BufReader::with_capacity(chunk, fl);
-            let mut hasher = Md5::new();
-            loop {
-                let length = {
-                    let buffer = reader.fill_buf().unwrap();
-                    hasher.input(&buffer);
-                    buffer.len()
-                };
-                if length == 0 {
-                    break;
-                }
-                reader.consume(length);
-            }
-            let md5_local = hasher.result_str();
-            Ok(md5_local == md5)
-        }
-        Err(e) => Err(format!("cannot open {} [{}]", local_path.to_str().unwrap(), e).into()),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use difference::diff;
@@ -191,20 +149,6 @@ mod tests {
     use ::consts::*;
     use ::util::ipv4::IPv4;
 
-    #[test]
-    fn test_compare_md5() {
-        let temp_file = env::temp_dir().join(".test_compare_md5");
-        let mut f = File::create(&temp_file).expect("failed to create file");
-        (0..1000).map(|_| "ok").collect::<String>();
-        f.write_all((0..1000)
-                .map(|_| "ok")
-                .collect::<String>()
-                .into_bytes()
-                .as_slice())
-            .expect("failed to write into file");
-        assert!(compare_md5(temp_file.as_path(), "1475d0fe0bbf3f58901703267deb7560").unwrap());
-        fs::remove_file(temp_file.as_path()).expect("failed to remove file");
-    }
     #[test]
     fn test_update_etc_hosts() {
         let temp_file = env::temp_dir().join(".test_update_etc_hosts");

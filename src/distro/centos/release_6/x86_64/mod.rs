@@ -69,7 +69,7 @@ fn download_iso_md5checked(local_path: &Path) -> Result<()> {
         .map(|l| l.split(' ').collect::<Vec<&str>>()[0])
         .collect::<Vec<_>>();
     if md5s.len() == 1 {
-        download_file_md5checked(&ISO, local_path, md5s[0])
+        md5sum::download_file(&ISO, local_path, md5s[0])
     } else {
         warn!("skip md5 checking");
         download_iso(local_path)
