@@ -69,9 +69,9 @@ fn print_usage(opts: Options) {
 static mut CONFIG_RELOAD: bool = false;
 
 #[allow(unused_variables)]
-fn daemonize() {
+fn daemonize() -> Result<()> {
     if getppid() == 1 {
-        return;
+        return Err("already daemonized".into());
     }
     match fork().expect("fork failed") {
         ForkResult::Parent { child } => {
@@ -99,6 +99,7 @@ fn daemonize() {
         },
         _ => panic!("failed to daemonize. dup2 failed.")
     }
+    Ok(())
 }
 
 extern "C" fn config_reload(_: i32) {
@@ -173,87 +174,113 @@ fn main() {
     // verify environment
     verify_env().unwrap();
 
+    let mut last_handled_config = None;
+
     // outermost loop
     'init: loop {
         // read toml
-        let config = Config::from_toml_file(Path::new(&config_path));
-        debug!("{:#?}", config);
+        match Config::from_toml_file(Path::new(&config_path)) {
+            Ok(config) => {
+                debug!("{:#?}", config);
 
-        // set up main connection
-        let conn = Conn::new(&config.setting.hypervisor);
+                // set up main connection
+                let conn = Conn::new(&config.setting.hypervisor);
 
-        // set up default storage pool + default network
-        let default_storage_pool = StoragePool::ensure(&conn,
-                                                       &config.setting.default_storage_pool_name,
-                                                       &config.setting.pool_root)
-            .expect("cannot make sure default storage exists and is active");
-        let default_nw = &config.setting.default_network;
-        let default_nw_br_ip = default_nw.nth_sibling(1);
-        let default_network =
-            virt::network::Network::ensure_default(&conn, &default_nw_br_ip, true);
-        let mut default_resources = ResourceBlend::new(&conn);
-        default_resources.put_network(&default_network);
-        default_resources.put_pool(&default_storage_pool);
+                // set up default storage pool + default network
+                let default_storage_pool = StoragePool::ensure(&conn,
+                                                               &config.setting.default_storage_pool_name,
+                                                               &config.setting.pool_root)
+                    .expect("cannot make sure default storage exists and is active");
+                let default_nw_br_ip = &config.setting.default_network.nth_sibling(1);
+                let default_network =
+                    virt::network::Network::ensure_default(&conn, &default_nw_br_ip, true);
+                let mut default_resources = ResourceBlend::new(&conn);
+                default_resources.put_network(&default_network);
+                default_resources.put_pool(&default_storage_pool);
 
-        if config.setting.daemonized {
-            daemonize();
-            let hup_action = signal::SigAction::new(signal::SigHandler::Handler(config_reload),
-                                                    signal::SaFlags::empty(),
-                                                    signal::SigSet::empty());
-            unsafe {
-                signal::sigaction(signal::SIGHUP, &hup_action)
-                    .expect("sigaction for SIGHUP failed");
-            }
-            let _child = config_hup(Path::new(&config_path)).expect("failed to setup config_hup");
-        }
-
-        // unless some intentional signal received,
-        // staying in this inner loop
-        'cycle: loop {
-            // construct templates.
-            let mut templates = Vec::new();
-            for ref template in config.templates.iter() {
-                let distro = Distros::search("centos6", "x86_64");
-                match Template::new(&default_resources, template, distro) {
-                    Ok(t) => {
-                        templates.push(t);
-                    }
-                    Err(e) => {
-                        warn!("{}", e);
-                        continue;
-                    }
-                };
-            }
-
-            // construct (+ run tests on) clusters.
-            // TODO: safely parallelize
-            for cluster in config.clusters.iter() {
-                let _c = match Cluster::new(cluster, &templates) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        error!("{}", e);
-                        continue;
-                    }
-                };
-            }
-
-            // if in daemon-mode, sleep five seconds and loop to next.
-            if config.setting.daemonized {
-                sleep(5);
-                if unsafe { CONFIG_RELOAD } {
-                    unsafe { CONFIG_RELOAD = false };
-                    let new_config = Config::from_toml_file(Path::new(&config_path));
-                    if config.differ_from(&new_config) {
-                        new_config.snapshot().expect("cannot save config snapshot");
-                        break 'cycle;
+                if config.setting.daemonized {
+                    // if it's already daemonized, returns Err.
+                    // in other words, changing the "daemonized" config value
+                    // to true is one-way trip.
+                    match daemonize() {
+                        Ok(_) => {
+                            let hup_action = signal::SigAction::new(
+                                signal::SigHandler::Handler(config_reload),
+                                signal::SaFlags::empty(),
+                                signal::SigSet::empty());
+                            unsafe {
+                                signal::sigaction(signal::SIGHUP, &hup_action)
+                                    .expect("sigaction for SIGHUP failed");
+                            }
+                            let _child = config_hup(Path::new(&config_path))
+                                .expect("failed to setup config_hup");
+                        },
+                        Err(_) => {}
                     }
                 }
-            } else {
-                break;
+
+                // staying in this inner loop
+                'cycle: loop {
+                    // construct templates.
+                    let mut templates = Vec::new();
+
+                    for ref template in config.templates.iter() {
+                        let distro = Distros::search("centos6", "x86_64");
+                        match Template::new(&default_resources, template, distro) {
+                            Ok(t) => {
+                                templates.push(t);
+                            }
+                            Err(e) => {
+                                warn!("{}", e);
+                                continue;
+                            }
+                        };
+                    }
+
+                    // construct (+ run tests on) clusters.
+                    // TODO: safely parallelize
+                    for cluster in config.clusters.iter() {
+                        let _c = match Cluster::new(cluster, &templates) {
+                            Ok(c) => c,
+                            Err(e) => {
+                                error!("{}", e);
+                                continue;
+                            }
+                        };
+                    }
+
+                    // if in daemon-mode, sleep five seconds and loop to next.
+                    if config.setting.daemonized {
+                        sleep(5);
+                        if unsafe { CONFIG_RELOAD } {
+                            unsafe { CONFIG_RELOAD = false };
+                            if let Ok(new_config) = Config::from_toml_file(Path::new(&config_path)) {
+                                // even if CONFIG_RELOAD was set true and reached here,
+                                // it won't break inner loop and reset config unless the
+                                // new config substantially differs from old one.
+                                if config.differ_from(&new_config) {
+                                    new_config.snapshot().expect("cannot save config snapshot");
+                                    break 'cycle;
+                                }
+                            }
+                        }
+                    } else {
+                        break 'init;
+                    }
+                }
+                last_handled_config = Some(config);
+            },
+            Err(e) => {
+                error!("{}", e);
+                if last_handled_config.is_some() {
+                    // when broken config left for a long time,
+                    // you'd get error message flood so slightly long
+                    // sleep time chosen here
+                    sleep(20);
+                } else {
+                    break;
+                }
             }
-        }
-        if !config.setting.daemonized {
-            break;
         }
     }
 }

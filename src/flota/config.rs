@@ -471,7 +471,7 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn from_toml_file(path: &Path) -> Config {
+    pub fn from_toml_file(path: &Path) -> Result<Config> {
         let mut file = File::open(path.to_str().unwrap())
             .expect(format!("Cannot open toml file: {}", path.display()).as_ref());
         let mut buf = String::new();
@@ -480,7 +480,7 @@ impl Config {
         let tml: toml::Value = buf.parse().unwrap();
         Config::from_toml(&tml)
     }
-    pub fn from_toml(tml: &toml::Value) -> Config {
+    pub fn from_toml(tml: &toml::Value) -> Result<Config> {
         let setting = if let Some(v) = tml.lookup("setting") {
             Setting::from_toml(&v)
         } else {
@@ -509,11 +509,12 @@ impl Config {
             }
             _ => vec![],
         };
-        Config {
+        // XXX: validate here
+        Ok(Config {
             setting: setting,
             templates: templates,
             clusters: clusters,
-        }
+        })
     }
     pub fn as_toml(&self) -> toml::Value {
         toml::encode(self)
@@ -543,7 +544,7 @@ impl Config {
             });
             if let Some(entry) = dentries.first() {
                 Some(Self::from_toml_file(::consts::CONFIG_HISTORY_DIR.join(
-                            entry.file_name()).as_path()))
+                            entry.file_name()).as_path()).unwrap())
             } else {
                 None
             }
