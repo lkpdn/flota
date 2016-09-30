@@ -9,6 +9,55 @@ use ::util::errors::*;
 use ::util::ipv4::IPv4;
 use ::util::url::Url;
 
+macro_rules! unfold {
+    ( $toml:ident, $key:expr, $ty:tt, optional, $default:expr ) => {{
+        match stringify!($ty) {
+            "IPv4"|"i32"|"PathBuf"|"String"|"Url" => {
+                unfold!($toml, $key, $ty, optional)
+                    .or(Some($default)).unwrap()
+            },
+            _ => panic!("unsupported type")
+        }
+    }};
+    ( $toml:ident, $key:expr, $ty:tt ) => {{
+        match stringify!($ty) {
+            "IPv4"|"i32"|"PathBuf"|"String"|"Url" => {
+                try!(unfold!($toml, $key, $ty, optional)
+                     .ok_or("`$key` must be specified"))
+            },
+            _ => panic!("unsupported type")
+        }
+    }};
+    ( $toml:ident, $key:expr, String, optional ) => {{
+        $toml.lookup($key)
+             .map(|val| val.as_str().unwrap().to_string())
+    }};
+    ( $toml:ident, $key:expr, IPv4, optional ) => {{
+        $toml.lookup($key)
+             .map(|val| {
+                 IPv4::from_cidr_notation(val.as_str().unwrap())
+                     .unwrap()
+             })
+    }};
+    ( $toml:ident, $key:expr, i32, optional ) => {{
+        $toml.lookup($key)
+             .map(|val| val.as_integer().unwrap() as i32)
+    }};
+    ( $toml:ident, $key:expr, PathBuf, optional ) => {{
+        $toml.lookup($key)
+             .map(|val| PathBuf::from(val.as_str().unwrap()))
+    }};
+    ( $toml:ident, $key:expr, Url, optional ) => {{
+        $toml.lookup($key)
+             .map(|val| {
+                 Url::parse(val.as_str().unwrap()).unwrap()
+             })
+    }};
+    ( $toml:ident, $key:expr, bool, optional ) => {{
+        $toml.lookup($key)
+             .map(|val| val.as_bool().unwrap())
+    }};
+}
 
 #[derive(Debug, Clone, RustcEncodable)]
 pub struct Setting {
@@ -113,16 +162,11 @@ pub enum Ingredient {
 
 impl Ingredient {
     pub fn distinguish(tml: &toml::Value) -> Result<Self> {
-        let distro = tml.lookup("distro")
-            .map(|val| val.as_str().unwrap());
-        let iso = tml.lookup("iso")
-            .map(|val| Url::parse(val.as_str().unwrap()).unwrap());
-        let iso_md5sum = tml.lookup("iso_md5sum")
-            .map(|val| Url::parse(val.as_str().unwrap()).unwrap());
-        let vmlinuz = tml.lookup("vmlinuz")
-            .map(|val| Url::parse(val.as_str().unwrap()).unwrap());
-        let initrd = tml.lookup("initrd")
-            .map(|val| Url::parse(val.as_str().unwrap()).unwrap());
+        let distro = unfold!(tml, "distro", String, optional);
+        let iso = unfold!(tml, "iso", Url, optional);
+        let iso_md5sum = unfold!(tml, "iso_md5sum", Url, optional);
+        let vmlinuz = unfold!(tml, "vmlinuz", Url, optional);
+        let initrd = unfold!(tml, "initrd", Url, optional);
         match (distro, iso, iso_md5sum, vmlinuz, initrd) {
             (Some(_), Some(_), _, Some(_), Some(_)) => {
                 Err("cannot tell which ingredient type you intend".into())
@@ -159,51 +203,56 @@ pub struct Template {
 }
 
 impl Template {
-    pub fn from_toml(tml: &toml::Value) -> Template {
-        let name = tml.lookup("name")
-            .map(|val| val.as_str().unwrap())
-            .unwrap();
-        let arch = tml.lookup("arch")
-            .map(|val| val.as_str().unwrap())
-            .unwrap();
+    pub fn from_toml(tml: &toml::Value) -> Result<Template> {
+        let name = unfold!(tml, "name", String);
+        let arch = unfold!(tml, "arch", String);
         let ingredient = match Ingredient::distinguish(tml) {
             Ok(ing) => ing,
             Err(_) => panic!("would not panic!"),
         };
-        let ks = tml.lookup("ks")
-            .map(|val| val.as_str().unwrap().to_owned());
-        let mgmt_user = tml.lookup("mgmt_user")
-            .map(|val| val.as_str().unwrap().to_owned())
-            .unwrap_or(format!("admin_{}", *PROGNAME));
+        let ks = unfold!(tml, "ks", String, optional);
+        let mgmt_user = unfold!(tml, "mgmt_user", String, optional, 
+                                format!("admin_{}", *PROGNAME));
         let mgmt_user_ssh_private_key = tml.lookup("mgmt_user_ssh_private_key")
             .map(|val| PathBuf::from(val.as_str().unwrap()))
             .unwrap_or(PathBuf::from(format!("/home/{}/.ssh/id_rsa", mgmt_user)));
-        Template {
-            name: name.to_owned(),
-            arch: arch.to_owned(),
+        Ok(Template {
+            name: name,
+            arch: arch,
             ingredient: ingredient,
             ks: ks,
             mgmt_user: mgmt_user,
             mgmt_user_ssh_private_key: mgmt_user_ssh_private_key,
-        }
+        })
+    }
+}
+
+#[derive(Debug, Clone, RustcEncodable)]
+pub enum ExecType {
+    Console,
+    Local,
+    Ssh {
+        user: String,
+        ip: IPv4,
+        options: Option<Vec<()>>
     }
 }
 
 #[derive(Debug, Clone, RustcEncodable)]
 pub struct Exec {
+    /// of enum ExecType
+    pub exec_type: ExecType,
     /// Hostname on which this Exec will be executed.
-    pub hostname: String,
-    /// For the time being this has to be an ssh user
-    /// to login and execute this Exec. Whether it has
-    /// to be a password-less sudoer depends.
-    pub user: String,
+    pub host: String,
     /// For the time being this is supposed to be directly
     /// executed on the guest side.
     pub command: String,
     /// Optionally you can set an expected stdout.
     pub expect_stdout: Option<String>,
+    /// Optionally you can set an expected stderr.
+    pub expect_stderr: Option<String>,
     /// Optionally you can set an expected exit code.
-    pub expect_status: Option<i64>,
+    pub expect_status: Option<i32>,
     /// If either expect_stdout or expect_status set,
     /// and if this is set true, all the following
     /// executions would be skipped on an unexpecte result.
@@ -211,30 +260,38 @@ pub struct Exec {
 }
 
 impl Exec {
-    pub fn from_toml(tml: &toml::Value) -> Exec {
-        let hostname = tml.lookup("hostname")
-            .map(|val| val.as_str().unwrap())
-            .unwrap();
-        let user = tml.lookup("user")
-            .map(|val| val.as_str().unwrap())
-            .unwrap();
-        let command = tml.lookup("command")
-            .map(|val| val.as_str().unwrap())
-            .unwrap();
-        let expect_stdout = tml.lookup("expect_stdout")
-            .map(|val| val.as_str().unwrap().to_string());
-        let expect_status = tml.lookup("expect_status")
-            .map(|val| val.as_integer().unwrap());
-        let abort_on_failure = tml.lookup("abort_on_failure")
-            .map(|val| val.as_bool().unwrap())
-            .unwrap();
-        Exec {
-            hostname: hostname.to_owned(),
-            user: user.to_owned(),
-            command: command.to_owned(),
-            expect_stdout: expect_stdout,
-            expect_status: expect_status,
-            abort_on_failure: abort_on_failure,
+    pub fn from_toml(tml: &toml::Value) -> Result<Exec> {
+        let exec_type = unfold!(tml, "type", String);
+        let hostname = unfold!(tml, "host", String);
+        let command = unfold!(tml, "command", String);
+        let expect_stdout = unfold!(tml, "stdout", String, optional);
+        let expect_stderr = unfold!(tml, "stderr", String, optional);
+        let expect_status = unfold!(tml, "status", i32, optional);
+        let abort_on_failure = unfold!(tml, "abort_on_failure", bool, optional, false);
+        match &*exec_type {
+            "console" | "local" => Ok(Exec {
+                exec_type: ExecType::Console,
+                host: hostname,
+                command: command,
+                expect_stdout: expect_stdout,
+                expect_stderr: expect_stderr,
+                expect_status: expect_status,
+                abort_on_failure: abort_on_failure
+            }),
+            "ssh" => Ok(Exec {
+                exec_type: ExecType::Ssh {
+                    user: unfold!(tml, "user", String),
+                    ip: unfold!(tml, "ip", IPv4),
+                    options: None,
+                },
+                host: hostname,
+                command: command,
+                expect_stdout: expect_stdout,
+                expect_stderr: expect_stderr,
+                expect_status: expect_status,
+                abort_on_failure: abort_on_failure,
+            }),
+            _ => Err("failed to build exec".into())
         }
     }
 }
@@ -248,17 +305,13 @@ pub struct HostInterface {
 }
 
 impl HostInterface {
-    pub fn from_toml(tml: &toml::Value) -> HostInterface {
-        let dev = tml.lookup("dev")
-            .map(|val| val.as_str().unwrap())
-            .unwrap();
-        let ip = tml.lookup("ip")
-            .map(|val| IPv4::from_cidr_notation(val.as_str().unwrap()).unwrap())
-            .unwrap();
-        HostInterface {
-            dev: dev.to_owned(),
+    pub fn from_toml(tml: &toml::Value) -> Result<HostInterface> {
+        let dev = unfold!(tml, "dev", String);
+        let ip = unfold!(tml, "ip", IPv4);
+        Ok(HostInterface {
+            dev: dev,
             ip: ip,
-        }
+        })
     }
 }
 
@@ -292,18 +345,14 @@ pub struct Host {
 }
 
 impl Host {
-    pub fn from_toml(tml: &toml::Value) -> Host {
-        let hostname = tml.lookup("hostname")
-            .map(|val| val.as_str().unwrap())
-            .unwrap();
-        let template = tml.lookup("template")
-            .map(|val| val.as_str().unwrap())
-            .unwrap();
+    pub fn from_toml(tml: &toml::Value) -> Result<Host> {
+        let hostname = unfold!(tml, "hostname", String);
+        let template = unfold!(tml, "template", String);
         let interfaces = match tml.lookup("interface") {
             Some(&toml::Value::Array(ref tml_ifs)) => {
                 let mut ifs = Vec::new();
                 for tml_if in tml_ifs {
-                    ifs.push(HostInterface::from_toml(&tml_if));
+                    ifs.push(HostInterface::from_toml(&tml_if).unwrap());
                 }
                 ifs
             }
@@ -315,7 +364,7 @@ impl Host {
             Some(&toml::Value::Array(ref tml_execs)) => {
                 let mut execs = Vec::new();
                 for tml_exec in tml_execs {
-                    execs.push(Exec::from_toml(&tml_exec));
+                    execs.push(Exec::from_toml(&tml_exec).unwrap());
                 }
                 Some(execs)
             }
@@ -325,7 +374,7 @@ impl Host {
             Some(&toml::Value::Array(ref tml_execs)) => {
                 let mut execs = Vec::new();
                 for tml_exec in tml_execs {
-                    execs.push(Exec::from_toml(&tml_exec));
+                    execs.push(Exec::from_toml(&tml_exec).unwrap());
                 }
                 Some(execs)
             }
@@ -335,7 +384,7 @@ impl Host {
             Some(&toml::Value::Array(ref tml_execs)) => {
                 let mut execs = Vec::new();
                 for tml_exec in tml_execs {
-                    execs.push(Exec::from_toml(&tml_exec));
+                    execs.push(Exec::from_toml(&tml_exec).unwrap());
                 }
                 Some(execs)
             }
@@ -344,14 +393,10 @@ impl Host {
         let destroy_when_finished = tml.lookup("destroy_when_finished")
             .map(|val| val.as_bool().unwrap())
             .unwrap_or(true);
-        let persistent = tml.lookup("persistent")
-            .map(|val| val.as_bool().unwrap())
-            .unwrap_or(true);
-        let mgmt_user = tml.lookup("mgmt_user")
-            .map(|val| val.as_str().unwrap().to_owned());
-        let mgmt_user_ssh_private_key = tml.lookup("mgmt_user_ssh_private_key")
-            .map(|val| PathBuf::from(val.as_str().unwrap()));
-        Host {
+        let persistent = unfold!(tml, "persistent", bool, optional, true);
+        let mgmt_user = unfold!(tml, "mgmt_user", String, optional);
+        let mgmt_user_ssh_private_key = unfold!(tml, "mgmt_user_ssh_private_key", PathBuf, optional);
+        Ok(Host {
             hostname: hostname.to_owned(),
             template: template.to_owned(),
             interfaces: interfaces,
@@ -362,7 +407,7 @@ impl Host {
             persistent: persistent,
             mgmt_user: mgmt_user,
             mgmt_user_ssh_private_key: mgmt_user_ssh_private_key,
-        }
+        })
     }
 }
 
@@ -396,7 +441,7 @@ impl Cluster {
             Some(&toml::Value::Array(ref tml_hsts)) => {
                 let mut hsts = Vec::new();
                 for tml_hst in tml_hsts {
-                    hsts.push(Host::from_toml(&tml_hst));
+                    hsts.push(Host::from_toml(&tml_hst).unwrap());
                 }
                 hsts
             }
@@ -409,7 +454,7 @@ impl Cluster {
             Some(&toml::Value::Array(ref tml_execs)) => {
                 let mut execs = Vec::new();
                 for tml_exec in tml_execs {
-                    execs.push(Exec::from_toml(&tml_exec));
+                    execs.push(Exec::from_toml(&tml_exec).unwrap());
                 }
                 execs
             }
@@ -419,7 +464,7 @@ impl Cluster {
             Some(&toml::Value::Array(ref tml_execs)) => {
                 let mut execs = Vec::new();
                 for tml_exec in tml_execs {
-                    execs.push(Exec::from_toml(&tml_exec));
+                    execs.push(Exec::from_toml(&tml_exec).unwrap());
                 }
                 execs
             }
@@ -429,7 +474,7 @@ impl Cluster {
             Some(&toml::Value::Array(ref tml_execs)) => {
                 let mut execs = Vec::new();
                 for tml_exec in tml_execs {
-                    execs.push(Exec::from_toml(&tml_exec));
+                    execs.push(Exec::from_toml(&tml_exec).unwrap());
                 }
                 execs
             }
@@ -477,8 +522,17 @@ impl Config {
         let mut buf = String::new();
         file.read_to_string(&mut buf)
             .expect(format!("Cannot read toml file: {}", path.display()).as_ref());
-        let tml: toml::Value = buf.parse().unwrap();
-        Config::from_toml(&tml)
+        match buf.parse() {
+            Ok(tml) => {
+                Config::from_toml(&tml)
+            },
+            Err(err) => {
+                for e in err.iter() {
+                    error!("{}", e);
+                }
+                Err("invalid toml".into())
+            }
+        }
     }
     pub fn from_toml(tml: &toml::Value) -> Result<Config> {
         let setting = if let Some(v) = tml.lookup("setting") {
@@ -490,7 +544,7 @@ impl Config {
             Some(&toml::Value::Array(ref tml_tmpls)) => {
                 let mut tmpls = Vec::new();
                 for tml_tmpl in tml_tmpls {
-                    tmpls.push(Template::from_toml(&tml_tmpl));
+                    tmpls.push(Template::from_toml(&tml_tmpl).unwrap());
                 }
                 tmpls
             }
