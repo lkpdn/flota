@@ -1,5 +1,5 @@
-use ssh2;
 use ::flota::config::Host as HostConfig;
+use ::exec::session::Session;
 use ::util::errors::*;
 use ::virt::ResourceBlend;
 use ::virt::conn::Conn;
@@ -34,7 +34,7 @@ pub trait InvasiveAdaption {
     // generated in "template" resources environment.
     fn adapt_network_state(&self,
                            host: &HostConfig,
-                           sess: &ssh2::Session,
+                           sess: &Session,
                            domain: &Domain,
                            template: &ResourceBlend)
                            -> Result<()>;

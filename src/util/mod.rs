@@ -1,6 +1,3 @@
-use ssh2;
-use ssh2::{CheckResult, HostKeyType, KnownHostFileKind, KnownHostKeyFormat};
-use std::env;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use url::Url;
@@ -40,43 +37,9 @@ macro_rules! cmd {
     }}
 }
 
-/// Update $HOME/.ssh/known_hosts file on host side (where the entire
-/// programme is running).
-pub fn update_known_host(session: &ssh2::Session, host: &str) -> Result<()> {
-    let mut known_hosts = try!(session.known_hosts());
-    let file = Path::new(&env::var("HOME").unwrap()).join(".ssh/known_hosts");
-    info!("updateing {}", file.to_str().unwrap());
-    try!(known_hosts.read_file(&file, KnownHostFileKind::OpenSSH));
-    let (key, key_type) = session.host_key().unwrap();
-    match known_hosts.check(host, key) {
-        CheckResult::Match => return Ok(()),
-        CheckResult::NotFound => {}
-        CheckResult::Mismatch => {
-            for r in known_hosts.iter().filter(|h| match h {
-                &Ok(ref h) => h.name() == Some(host),
-                _ => false,
-            }) {
-                try!(known_hosts.remove(r.unwrap()));
-            }
-        }
-        CheckResult::Failure => panic!("failed to check the known hosts"),
-    }
-    info!("adding {} to the known hosts", host);
-    try!(known_hosts.add(host,
-                         key,
-                         host,
-                         match key_type {
-                             HostKeyType::Rsa => KnownHostKeyFormat::SshRsa,
-                             HostKeyType::Dss => KnownHostKeyFormat::SshDss,
-                             HostKeyType::Unknown => panic!("unknown type of key"),
-                         }));
-    try!(known_hosts.write_file(&file, KnownHostFileKind::OpenSSH));
-    Ok(())
-}
-
-/// Update /etc/hosts file on host side (where the entire programme
-/// is running) to enable ssh login guest node just specifying its
-/// hostname.
+// Update /etc/hosts file on host side (where the entire programme
+// is running) to enable ssh login guest node just specifying its
+// hostname.
 pub fn update_etc_hosts(path: Option<&Path>, ip: &IPv4, hostname: &str) -> Result<()> {
     let hosts_path: &str = match path {
         Some(v) => v.to_str().unwrap(),

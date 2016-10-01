@@ -40,6 +40,8 @@ use std::process::Command;
 pub mod consts;
 use consts::*;
 
+pub mod exec;
+
 pub mod libvirt;
 
 #[macro_use]

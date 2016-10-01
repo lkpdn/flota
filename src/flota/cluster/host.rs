@@ -1,12 +1,11 @@
-use ssh2;
-use std::net::TcpStream;
 use std::ops::Deref;
 use ::distro;
+use ::exec::session::ssh;
 use ::flota::config;
 use ::flota::template;
 use ::util::errors::*;
 use ::util::ipv4::IPv4;
-use ::util::{update_etc_hosts, update_known_host};
+use ::util::update_etc_hosts;
 use ::virt::domain::*;
 use ::virt::network::*;
 use ::virt::storage::volume::*;
@@ -92,14 +91,8 @@ impl Host {
         };
 
         // implicit setups
-        let tcp = TcpStream::connect(format!("{}:22", &mgmt_ip.ip()).as_str()).unwrap();
-        let mut sess = ssh2::Session::new().unwrap();
-        sess.handshake(&tcp).unwrap();
-        sess.userauth_pubkey_file(&mgmt_user, None, &mgmt_user_ssh_private_key, None).unwrap();
-        sess.set_timeout(3000);
-        sess.set_blocking(true);
-        sess.set_allow_sigpipe(true);
-        try!(update_known_host(&sess, &mgmt_ip.ip()));
+        let sess = ssh::SessSsh::new(&mgmt_user, &mgmt_ip, 22, &mgmt_user_ssh_private_key).unwrap();
+        try!(sess.update_known_host(&mgmt_ip.ip()));
         debug!("trying to ssh -i {} -l {} {}",
                mgmt_user_ssh_private_key.to_str().unwrap(),
                mgmt_user,

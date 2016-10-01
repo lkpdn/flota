@@ -1,6 +1,5 @@
 use notify;
 use ssh2;
-use toml;
 use std::io;
 use std::string;
 use std::sync::mpsc;
