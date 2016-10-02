@@ -78,13 +78,13 @@ impl<T: CentOS6> distro::InvasiveAdaption for T {
         // XXX: one of the ugliest part human being ever seen.
         // the reason iproute2 are used instead of network service utility or
         // direct ifconfig is that in the previous part we changed ifcfgs online.
-        try!(sess.exec(r#"sudo nohup sh -c '
+        let _pray = sess.exec(r#"sudo nohup sh -c '
              ls /sys/class/net | xargs -i ip l set dev {} down;
              cat /dev/null > /etc/udev/rules.d/70-persistent-net.rules;
              lspci -v | sed '\''/^$/{x;/Ethernet/{s/^.*modules: \(.*\)\n*.*$/\1/;s/,//;s/ /\n/;p;};d};H;$!d;'\'' |
              sort | uniq | xargs -i sh -c "sudo modprobe -r {}; sudo modprobe {}"
              udevadm trigger --attr-match=subsystem=net;\
-             ls /sys/class/net | xargs -i ip l set dev {} up;'"#));
+             ls /sys/class/net | xargs -i ip l set dev {} up;'"#);
         Ok(())
     }
 }

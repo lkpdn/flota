@@ -12,7 +12,7 @@ use ::util::url::Url;
 macro_rules! unfold {
     ( $toml:ident, $key:expr, $ty:tt, optional, $default:expr ) => {{
         match stringify!($ty) {
-            "IPv4"|"i32"|"PathBuf"|"String"|"Url" => {
+            "bool"|"IPv4"|"i32"|"PathBuf"|"String"|"Url" => {
                 unfold!($toml, $key, $ty, optional)
                     .or(Some($default)).unwrap()
             },
@@ -21,9 +21,9 @@ macro_rules! unfold {
     }};
     ( $toml:ident, $key:expr, $ty:tt ) => {{
         match stringify!($ty) {
-            "IPv4"|"i32"|"PathBuf"|"String"|"Url" => {
+            "bool"| "IPv4"|"i32"|"PathBuf"|"String"|"Url" => {
                 try!(unfold!($toml, $key, $ty, optional)
-                     .ok_or("`$key` must be specified"))
+                     .ok_or(format!("`{}` must be specified", $key).as_str()))
             },
             _ => panic!("unsupported type")
         }
@@ -262,16 +262,24 @@ pub struct Exec {
 impl Exec {
     pub fn from_toml(tml: &toml::Value) -> Result<Exec> {
         let exec_type = unfold!(tml, "type", String);
-        let hostname = unfold!(tml, "host", String);
         let command = unfold!(tml, "command", String);
         let expect_stdout = unfold!(tml, "stdout", String, optional);
         let expect_stderr = unfold!(tml, "stderr", String, optional);
         let expect_status = unfold!(tml, "status", i32, optional);
         let abort_on_failure = unfold!(tml, "abort_on_failure", bool, optional, false);
         match &*exec_type {
-            "console" | "local" => Ok(Exec {
+            "console" => Ok(Exec {
                 exec_type: ExecType::Console,
-                host: hostname,
+                host: unfold!(tml, "host", String),
+                command: command,
+                expect_stdout: expect_stdout,
+                expect_stderr: expect_stderr,
+                expect_status: expect_status,
+                abort_on_failure: abort_on_failure
+            }),
+            "local" => Ok(Exec {
+                exec_type: ExecType::Console,
+                host: "localhost".to_string(),
                 command: command,
                 expect_stdout: expect_stdout,
                 expect_stderr: expect_stderr,
@@ -284,7 +292,7 @@ impl Exec {
                     ip: unfold!(tml, "ip", IPv4),
                     options: None,
                 },
-                host: hostname,
+                host: unfold!(tml, "host", String),
                 command: command,
                 expect_stdout: expect_stdout,
                 expect_stderr: expect_stderr,

@@ -9,13 +9,16 @@ use ::util::errors::*;
 use ::util::ipv4::IPv4;
 use super::{Return, SeedType, Session, SessionSeed};
 
+#[allow(dead_code)]
 pub struct SessSsh {
-    inner: ssh2::Session,
+    session: ssh2::Session,
+    tcp_stream: TcpStream,
 }
 
 impl Session for SessSsh {
     fn exec(&self, command: &str) -> Result<Return> {
-        match self.inner.channel_session() {
+        debug!("command: {}", command);
+        match self.session.channel_session() {
             Ok(mut channel) => {
                 channel.exec(command).unwrap();
                 let mut stdout = String::new();
@@ -35,6 +38,7 @@ impl Session for SessSsh {
 
 impl SessSsh {
     pub fn new(user: &str, ip: &IPv4, port: i32, priv_key: &Path) -> Box<Self> {
+        debug!("tcp stream connect: {}:{}", &ip.ip(), port);
         let tcp = TcpStream::connect(format!("{}:{}",
                                              &ip.ip(), port).as_str())
             .unwrap();
@@ -46,17 +50,20 @@ impl SessSsh {
         sess.set_allow_sigpipe(true);
         debug!("new session: {{user: {}, host: {}, priv_key: {}}}",
                user, ip.ip(), priv_key.to_str().unwrap());
-        Box::new(SessSsh { inner: sess })
+        Box::new(SessSsh {
+            session: sess,
+            tcp_stream: tcp,
+        })
     }
 
     // Update $HOME/.ssh/known_hosts file on host side (where the entire
     // programme is running).
     pub fn update_known_host(&self, host: &str) -> Result<()> {
-        let mut known_hosts = try!(self.inner.known_hosts());
+        let mut known_hosts = try!(self.session.known_hosts());
         let file = Path::new(&env::var("HOME").unwrap()).join(".ssh/known_hosts");
         info!("updateing {}", file.to_str().unwrap());
         try!(known_hosts.read_file(&file, KnownHostFileKind::OpenSSH));
-        let (key, key_type) = self.inner.host_key().unwrap();
+        let (key, key_type) = self.session.host_key().unwrap();
         match known_hosts.check(host, key) {
             CheckResult::Match => return Ok(()),
             CheckResult::NotFound => {}

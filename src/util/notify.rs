@@ -1,5 +1,5 @@
 use libc;
-use nix::unistd::{close, dup2, fork, ForkResult, getppid, pipe};
+use nix::unistd::{fork, ForkResult, getppid};
 use nix::sys::signal;
 use notify;
 use notify::{RecommendedWatcher, Watcher};
@@ -34,16 +34,11 @@ pub fn config_hup(path: &Path) -> Result<i32> {
 
 // fork and return child pid
 pub fn tailf_background(path: &Path) -> Result<i32> {
-    let (r, w) = pipe().unwrap();
     match fork().expect("fork failed") {
         ForkResult::Parent { child } => {
-            close(w).expect("cannot close fd");
-            dup2(r, libc::STDIN_FILENO).expect("dup2 failed");
             Ok(child)
         }
         ForkResult::Child => {
-            close(r).expect("cannot close fd");
-            dup2(libc::STDOUT_FILENO, w).expect("dup2 failed");
             let (tx, rx) = channel();
             let mut watcher: RecommendedWatcher = try!(Watcher::new(tx));
             try!(watcher.watch(path.to_str().unwrap()));
