@@ -1,10 +1,11 @@
 use std::ops::Deref;
 use ::distro;
-use ::exec::session::ssh;
+use ::exec::session;
+use ::exec::session::*;
+use ::exec::session::ssh::SessSeedSsh;
 use ::flota::config;
 use ::flota::template;
 use ::util::errors::*;
-use ::util::ipv4::IPv4;
 use ::util::update_etc_hosts;
 use ::virt::domain::*;
 use ::virt::network::*;
@@ -13,13 +14,11 @@ use ::virt::storage::volume::*;
 #[derive(Debug)]
 pub struct Host {
     pub domain: Domain,
-    pub mgmt_ip: IPv4,
-    pub mgmt_user: String,
 }
 
 impl Host {
-    pub fn new<'a, D: ?Sized>(host: &config::Host, template: &template::Template<D>) -> Result<Self>
-        where D: distro::Base + distro::InvasiveAdaption
+    pub fn new<'a, D: ?Sized>(host: &config::Host, template: &template::Template<D>)
+        -> Result<Self> where D: distro::Base + distro::InvasiveAdaption
     {
         // make sure networks are all available.
         // all but mgmt subnet are without dhcp functionality
@@ -62,6 +61,7 @@ impl Host {
         debug!("mgmt interface's mac address: {} (domain: {})",
                mgmt_mac,
                &host.hostname);
+
         // detect an obtained lease trying 20 times with the sleep interval 3 sec.
         let mgmt_ip = match template.resources.network() {
             Some(ref nw) => {
@@ -78,28 +78,24 @@ impl Host {
             None => panic!("yup"),
         };
 
-        // management user
-        let mgmt_user = if let Some(ref u) = host.mgmt_user {
-            u.to_owned()
-        } else {
-            template.mgmt_user.clone()
-        };
-        let mgmt_user_ssh_private_key = if let Some(ref p) = host.mgmt_user_ssh_private_key {
-            &p
-        } else {
-            &template.mgmt_user_ssh_private_key
-        };
-
         // implicit setups
-        let sess = ssh::SessSsh::new(&mgmt_user, &mgmt_ip, 22, &mgmt_user_ssh_private_key).unwrap();
-        try!(sess.update_known_host(&mgmt_ip.ip()));
-        debug!("trying to ssh -i {} -l {} {}",
-               mgmt_user_ssh_private_key.to_str().unwrap(),
-               mgmt_user,
-               &mgmt_ip.ip());
+        let mut seeds = Vec::new();
+        for ref mut seed in template.session_seeds.clone().iter() {
+            if seed.seed_type() != SeedType::Ssh {
+                let s: Box<SessionSeed> = seed.clone();
+                seeds.push(s);
+                continue;
+            }
+            let mut new_seed = seed.clone();
+            if let Some(ref mut x) = new_seed.as_mut_any().downcast_mut::<SessSeedSsh>() {
+                x.ip = Some(mgmt_ip.clone());
+            }
+            seeds.push(new_seed);
+        }
 
-        // invasive adaptions
-        try!(template.distro.deref().adapt_network_state(&host, &sess, &dom, &template.resources));
+        let session = session::try_spawn(seeds, vec![SeedType::Ssh]).unwrap();
+        try!(template.distro.deref().adapt_network_state(
+                &host, unsafe { &*Box::into_raw(session) }, &dom, &template.resources));
 
         // update host-side /etc/hosts
         for interface in host.interfaces.iter() {
@@ -108,16 +104,33 @@ impl Host {
                                   &host.hostname));
         }
 
-        // solo pre-tests
-
-        // solo tests
-
-        // solo post-tests
+        // solo pre-tests --> tests --> post-tests
+        for tests in vec![
+            &host.solo_pre_tests,
+            &host.solo_tests,
+            &host.solo_post_tests
+        ].iter() {
+            for one_exec in tests.iter() {
+                if let Some(seed_type) = SeedType::from_exec_type(&one_exec.exec_type) {
+                    if let Some(seed) = template.session_seeds.iter().find(|s| s.seed_type() == seed_type) {
+                        let sess = seed.spawn().unwrap();
+                        match sess.exec(&one_exec.command) {
+                            Ok(ret) => {
+                                info!("exit status: {}", ret.status);
+                                info!("stdout: {}", ret.stdout);
+                                info!("stderr: {}", ret.stderr);
+                            },
+                            Err(e) => {
+                                error!("{}", e);
+                            }
+                        }
+                    }
+                } else { panic!("would not panic") }
+            }
+        }
 
         Ok(Host {
             domain: dom,
-            mgmt_ip: mgmt_ip,
-            mgmt_user: mgmt_user,
         })
     }
 }

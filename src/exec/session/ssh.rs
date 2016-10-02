@@ -1,22 +1,23 @@
+use std::any::Any;
 use ssh2;
 use ssh2::{CheckResult, HostKeyType, KnownHostFileKind, KnownHostKeyFormat};
 use std::env;
 use std::io::prelude::*;
 use std::net::TcpStream;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use ::util::errors::*;
 use ::util::ipv4::IPv4;
-use super::{Return, Session};
+use super::{Return, SeedType, Session, SessionSeed};
 
 pub struct SessSsh {
     inner: ssh2::Session,
 }
 
 impl Session for SessSsh {
-    fn exec(&self, command: String) -> Result<Return> {
+    fn exec(&self, command: &str) -> Result<Return> {
         match self.inner.channel_session() {
             Ok(mut channel) => {
-                channel.exec(&command).unwrap();
+                channel.exec(command).unwrap();
                 let mut stdout = String::new();
                 let mut stderr = String::new();
                 try!(channel.read_to_string(&mut stdout));
@@ -33,7 +34,7 @@ impl Session for SessSsh {
 }
 
 impl SessSsh {
-    pub fn new(user: &str, ip: &IPv4, port: i32, priv_key: &Path) -> Result<Self> {
+    pub fn new(user: &str, ip: &IPv4, port: i32, priv_key: &Path) -> Box<Self> {
         let tcp = TcpStream::connect(format!("{}:{}",
                                              &ip.ip(), port).as_str())
             .unwrap();
@@ -45,8 +46,9 @@ impl SessSsh {
         sess.set_allow_sigpipe(true);
         debug!("new session: {{user: {}, host: {}, priv_key: {}}}",
                user, ip.ip(), priv_key.to_str().unwrap());
-        Ok(SessSsh { inner: sess })
+        Box::new(SessSsh { inner: sess })
     }
+
     // Update $HOME/.ssh/known_hosts file on host side (where the entire
     // programme is running).
     pub fn update_known_host(&self, host: &str) -> Result<()> {
@@ -79,5 +81,40 @@ impl SessSsh {
                              }));
         try!(known_hosts.write_file(&file, KnownHostFileKind::OpenSSH));
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SessSeedSsh {
+    pub user: String,
+    pub ip: Option<IPv4>,
+    pub port: i32,
+    pub priv_key: PathBuf,
+}
+
+impl SessSeedSsh {
+    pub fn new(user: &str, ip: Option<&IPv4>, port: i32, priv_key: &Path) -> Box<SessionSeed> {
+        Box::new(SessSeedSsh {
+            user: user.to_owned(),
+            ip: match ip { Some(v) => Some(v.clone()), None => None },
+            port: port,
+            priv_key: priv_key.to_path_buf(),
+        })
+    }
+}
+
+impl SessionSeed for SessSeedSsh {
+    fn spawn(&self) -> Result<Box<Session>> {
+        // at this moment self.ip must be some.
+        Ok(self::SessSsh::new(&self.user, match self.ip {
+            Some(ref v) => v,
+            None => panic!("would not panic")
+        }, self.port, self.priv_key.as_path()))
+    }
+    fn seed_type(&self) -> SeedType {
+        SeedType::Ssh
+    }
+    fn as_mut_any(&mut self) -> &mut Any {
+        self
     }
 }

@@ -23,7 +23,7 @@ impl<T: CentOS6> distro::InvasiveAdaption for T {
                        host.hostname,
                        host.hostname,
                        host.hostname,
-                       host.hostname)));
+                       host.hostname).as_str()));
         for interface in &host.interfaces {
             if let Some(mac) = domain.get_mac_of_ip(&interface.ip) {
                 let cfg = format!("\
@@ -47,7 +47,7 @@ impl<T: CentOS6> distro::InvasiveAdaption for T {
                                cat <<\"EOF\" | sudo tee \
                                /etc/sysconfig/network-scripts/ifcfg-{}\n{}\nEOF\n\n",
                                interface.dev,
-                               cfg)));
+                               cfg).as_str()));
             }
         }
 
@@ -72,7 +72,7 @@ impl<T: CentOS6> distro::InvasiveAdaption for T {
             try!(sess.exec(format!("
                            echo -e \"{}\" | sudo tee \
                            /etc/sysconfig/network-scripts/ifcfg-eth999",
-                           cfg)));
+                           cfg).as_str()));
         }
 
         // XXX: one of the ugliest part human being ever seen.
@@ -84,7 +84,7 @@ impl<T: CentOS6> distro::InvasiveAdaption for T {
              lspci -v | sed '\''/^$/{x;/Ethernet/{s/^.*modules: \(.*\)\n*.*$/\1/;s/,//;s/ /\n/;p;};d};H;$!d;'\'' |
              sort | uniq | xargs -i sh -c "sudo modprobe -r {}; sudo modprobe {}"
              udevadm trigger --attr-match=subsystem=net;\
-             ls /sys/class/net | xargs -i ip l set dev {} up;'"#.to_string()));
+             ls /sys/class/net | xargs -i ip l set dev {} up;'"#));
         Ok(())
     }
 }

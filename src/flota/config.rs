@@ -324,11 +324,11 @@ pub struct Host {
     /// Network interfaces.
     pub interfaces: Vec<HostInterface>,
     /// Additional setups before standalone tests.
-    pub solo_pre_tests: Option<Vec<Exec>>,
+    pub solo_pre_tests: Vec<Exec>,
     /// Standalone tests.
-    pub solo_tests: Option<Vec<Exec>>,
+    pub solo_tests: Vec<Exec>,
     /// Additional execs after standalone tests.
-    pub solo_post_tests: Option<Vec<Exec>>,
+    pub solo_post_tests: Vec<Exec>,
     /// If true, poweroff after the cluster it belongs
     /// to has finished all tasks.
     /// DEFAULT: true
@@ -337,11 +337,6 @@ pub struct Host {
     /// cluster it belongs to has finidhed all tasks.
     /// DEFAULT: true
     pub persistent: bool,
-    /// To override Template's definition for SSH Login
-    /// user name for management use.
-    pub mgmt_user: Option<String>,
-    /// SSH private key path
-    pub mgmt_user_ssh_private_key: Option<PathBuf>,
 }
 
 impl Host {
@@ -366,9 +361,9 @@ impl Host {
                 for tml_exec in tml_execs {
                     execs.push(Exec::from_toml(&tml_exec).unwrap());
                 }
-                Some(execs)
+                execs
             }
-            _ => None,
+            _ => vec![]
         };
         let solo_tests = match tml.lookup("solo_tests") {
             Some(&toml::Value::Array(ref tml_execs)) => {
@@ -376,9 +371,9 @@ impl Host {
                 for tml_exec in tml_execs {
                     execs.push(Exec::from_toml(&tml_exec).unwrap());
                 }
-                Some(execs)
+                execs
             }
-            _ => None,
+            _ => vec![]
         };
         let solo_post_tests = match tml.lookup("solo_post_tests") {
             Some(&toml::Value::Array(ref tml_execs)) => {
@@ -386,16 +381,14 @@ impl Host {
                 for tml_exec in tml_execs {
                     execs.push(Exec::from_toml(&tml_exec).unwrap());
                 }
-                Some(execs)
+                execs
             }
-            _ => None,
+            _ => vec![]
         };
         let destroy_when_finished = tml.lookup("destroy_when_finished")
             .map(|val| val.as_bool().unwrap())
             .unwrap_or(true);
         let persistent = unfold!(tml, "persistent", bool, optional, true);
-        let mgmt_user = unfold!(tml, "mgmt_user", String, optional);
-        let mgmt_user_ssh_private_key = unfold!(tml, "mgmt_user_ssh_private_key", PathBuf, optional);
         Ok(Host {
             hostname: hostname.to_owned(),
             template: template.to_owned(),
@@ -405,8 +398,6 @@ impl Host {
             solo_post_tests: solo_post_tests,
             destroy_when_finished: destroy_when_finished,
             persistent: persistent,
-            mgmt_user: mgmt_user,
-            mgmt_user_ssh_private_key: mgmt_user_ssh_private_key,
         })
     }
 }

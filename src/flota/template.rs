@@ -1,17 +1,17 @@
-use std::path::PathBuf;
 use ::flota::config;
 use ::distro;
+use ::exec::session::*;
+use ::exec::session::ssh::SessSeedSsh;
 use ::util::errors::*;
 use ::virt::*;
 use ::virt::domain::snapshot::*;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Template<'a, T: distro::Base + ?Sized> {
     pub name: String,
     pub path_disk: String,
     pub resources: &'a ResourceBlend<'a>,
-    pub mgmt_user: String,
-    pub mgmt_user_ssh_private_key: PathBuf,
+    pub session_seeds: SessionSeeds,
     pub distro: Box<T>,
 }
 
@@ -34,12 +34,20 @@ impl<'a, T: distro::Base + ?Sized> Template<'a, T> {
 
         try!(dom.destroy());
 
+        // XXX: now its okay to have only one choice, maybe not?
+        let session_seeds = vec![
+            SessSeedSsh::new(
+                &template.mgmt_user,
+                None, 22,
+                template.mgmt_user_ssh_private_key.as_path()
+            )
+        ];
+
         Ok(Template {
             name: template.name.to_owned(),
             path_disk: volume.get_path().to_owned(),
             resources: resources,
-            mgmt_user: template.mgmt_user.to_owned(),
-            mgmt_user_ssh_private_key: template.mgmt_user_ssh_private_key.to_owned(),
+            session_seeds: session_seeds,
             distro: distro,
         })
     }
