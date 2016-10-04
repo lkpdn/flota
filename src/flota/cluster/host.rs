@@ -17,7 +17,7 @@ pub struct Host {
 }
 
 impl Host {
-    pub fn new<'a, D: ?Sized>(host: &config::Host, template: &template::Template<D>)
+    pub fn new<'a, D: ?Sized>(host: &config::cluster::Host, template: &template::Template<D>)
         -> Result<Self> where D: distro::Base + distro::InvasiveAdaption
     {
         // make sure networks are all available.

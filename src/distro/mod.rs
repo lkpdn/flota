@@ -1,4 +1,4 @@
-use ::flota::config::Host as HostConfig;
+use ::flota::config::cluster::Host as HostConfig;
 use ::exec::session::Session;
 use ::util::errors::*;
 use ::virt::ResourceBlend;

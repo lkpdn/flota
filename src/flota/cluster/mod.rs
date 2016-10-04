@@ -13,7 +13,7 @@ pub struct Cluster {
 }
 
 impl Cluster {
-    pub fn new<'a, D: ?Sized>(cluster: &config::Cluster,
+    pub fn new<'a, D: ?Sized>(cluster: &config::cluster::Cluster,
                               templates: &Vec<template::Template<D>>)
                               -> Result<Self>
         where D: distro::Base + distro::InvasiveAdaption
@@ -21,7 +21,7 @@ impl Cluster {
         let mut res = Vec::new();
         for host in cluster.hosts.iter() {
             // search for a template matched to the host
-            let template = match templates.iter().find(|&t| t.name == host.template) {
+            let template = match templates.iter().find(|&t| t.name == host.template.name) {
                 Some(v) => v,
                 None => continue,
             };

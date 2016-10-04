@@ -4,7 +4,7 @@ use std::ops::Deref;
 use url;
 use url::Url as U;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Url(U);
 
 impl Encodable for Url {

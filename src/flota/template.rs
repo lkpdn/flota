@@ -17,7 +17,7 @@ pub struct Template<'a, T: distro::Base + ?Sized> {
 
 impl<'a, T: distro::Base + ?Sized> Template<'a, T> {
     pub fn new(resources: &'a ResourceBlend,
-               template: &config::Template,
+               template: &config::template::Template,
                distro: Box<T>)
                -> Result<Self> {
 

@@ -51,7 +51,7 @@ use util::notify::config_hup;
 
 pub mod flota;
 use flota::cluster::Cluster;
-use flota::config::Config;
+use flota::config::*;
 use flota::template::Template;
 
 #[macro_use]
@@ -176,7 +176,7 @@ fn main() {
     // verify environment
     verify_env().unwrap();
 
-    let mut last_handled_config = None;
+    let mut first_cycle = true;
 
     // outermost loop
     'init: loop {
@@ -226,7 +226,7 @@ fn main() {
                     // construct templates.
                     let mut templates = Vec::new();
 
-                    for ref template in config.templates.iter() {
+                    for ref template in &config.templates {
                         let distro = Distros::search("centos6", "x86_64");
                         match Template::new(&default_resources, template, distro) {
                             Ok(t) => {
@@ -241,7 +241,7 @@ fn main() {
 
                     // construct (+ run tests on) clusters.
                     // TODO: safely parallelize
-                    for cluster in config.clusters.iter() {
+                    for ref cluster in &config.clusters {
                         let _c = match Cluster::new(cluster, &templates) {
                             Ok(c) => c,
                             Err(e) => {
@@ -256,13 +256,19 @@ fn main() {
                         sleep(5);
                         if unsafe { CONFIG_RELOAD } {
                             unsafe { CONFIG_RELOAD = false };
-                            if let Ok(new_config) = Config::from_toml_file(Path::new(&config_path)) {
-                                // even if CONFIG_RELOAD was set true and reached here,
-                                // it won't break inner loop and reset config unless the
-                                // new config substantially differs from old one.
-                                if config.differ_from(&new_config) {
-                                    new_config.snapshot().expect("cannot save config snapshot");
-                                    break 'cycle;
+                            match Config::from_toml_file(Path::new(&config_path)) {
+                                Ok(ref new_config) => {
+                                    if config.differ_from(new_config) {
+                                        // even if CONFIG_RELOAD was set true and reached here,
+                                        // it won't break inner loop and reset config unless the
+                                        // new config substantially differs from old one.
+                                        new_config.snapshot() 
+                                                  .expect("cannot save config snapshot");
+                                        break 'cycle;
+                                    }
+                                },
+                                Err(e) => {
+                                    error!("{}", e);
                                 }
                             }
                         }
@@ -270,17 +276,17 @@ fn main() {
                         break 'init;
                     }
                 }
-                last_handled_config = Some(config);
+                first_cycle = false;
             },
             Err(e) => {
                 error!("{}", e);
-                if last_handled_config.is_some() {
+                if first_cycle { 
+                    break
+                } else {
                     // when broken config left for a long time,
                     // you'd get error message flood so slightly long
                     // sleep time chosen here
                     sleep(20);
-                } else {
-                    break;
                 }
             }
         }
