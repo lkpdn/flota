@@ -1,6 +1,8 @@
+use std::fmt;
 use ::flota::config::cluster::Host as HostConfig;
 use ::exec::session::Session;
 use ::util::errors::*;
+use ::util::url::Url;
 use ::virt::ResourceBlend;
 use ::virt::conn::Conn;
 use ::virt::domain::Domain;
@@ -8,10 +10,10 @@ use ::virt::network::Network;
 use ::virt::storage::pool::StoragePool;
 use ::virt::storage::volume::Volume;
 
-pub trait Distro: Base + InvasiveAdaption {}
-impl<T: Base + InvasiveAdaption> Distro for T {}
+pub trait Distro: Base + InvasiveAdaption + DistroClone {}
+impl<T: 'static + Base + Clone + InvasiveAdaption> Distro for T {}
 
-pub trait Base {
+pub trait Base : fmt::Debug {
     fn distro(&self) -> String;
     fn release(&self) -> String;
     fn arch(&self) -> String;
@@ -22,6 +24,22 @@ pub trait Base {
                    network: &Network,
                    unattended_script: &str)
                    -> Result<(Domain, Volume)>;
+}
+
+pub trait DistroClone {
+    fn clone_box(&self) -> Box<Distro>;
+}
+
+impl<T> DistroClone for T where T: 'static + Distro + Clone {
+    fn clone_box(&self) -> Box<Distro> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<Distro> {
+    fn clone(&self) -> Box<Distro> {
+        self.clone_box()
+    }
 }
 
 #[allow(unused_variables)]
@@ -51,5 +69,9 @@ impl Distros {
             ("centos6", "x86_64") => Box::new(centos::release_6::x86_64::CentOS6_x8664 {}),
             _ => unimplemented!(),
         }
+    }
+    // XXX: linux is not the only choice
+    pub fn custom(iso: &Url, iso_md5sum: &Option<Url>, vmlinuz: &Url, initrd: &Url) -> Box<Distro> {
+        unimplemented!()
     }
 }

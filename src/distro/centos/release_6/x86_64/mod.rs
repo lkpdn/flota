@@ -89,6 +89,7 @@ fn download_initrd(local_path: &Path) -> Result<()> {
 }
 
 #[allow(non_camel_case_types)]
+#[derive(Debug, Clone)]
 pub struct CentOS6_x8664;
 
 impl CentOS6 for CentOS6_x8664 {}

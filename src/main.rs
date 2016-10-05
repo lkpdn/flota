@@ -31,6 +31,7 @@ use getopts::Options;
 use std::env;
 use std::fs;
 use std::os::unix::io::AsRawFd;
+use std::sync::Arc;
 use nix::sys::signal;
 use nix::unistd::{close, dup2, fork, ForkResult, getppid, sleep};
 use std::path::Path;
@@ -52,6 +53,7 @@ use util::notify::config_hup;
 pub mod flota;
 use flota::cluster::Cluster;
 use flota::config::*;
+use flota::config::template::Ingredient;
 use flota::template::Template;
 
 #[macro_use]
@@ -227,10 +229,25 @@ fn main() {
                     let mut templates = Vec::new();
 
                     for ref template in &config.templates {
-                        let distro = Distros::search("centos6", "x86_64");
+                        let distro = match &template.ingredient {
+                            &Ingredient::OffTheShelf {
+                                ref distro
+                            } => {
+                                Distros::search(&distro, &template.arch)
+                            },
+                            // XXX: linux is not the only choice
+                            &Ingredient::Custom {
+                                ref iso,
+                                ref iso_md5sum,
+                                ref vmlinuz,
+                                ref initrd,
+                            } => {
+                                Distros::custom(iso, iso_md5sum, vmlinuz, initrd)
+                            }
+                        };
                         match Template::new(&default_resources, template, distro) {
                             Ok(t) => {
-                                templates.push(t);
+                                templates.push(Arc::new(t));
                             }
                             Err(e) => {
                                 warn!("{}", e);

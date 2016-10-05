@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::fmt;
 use ::flota::config;
 use ::util::errors::*;
 
@@ -10,7 +11,7 @@ pub trait Session {
     fn exec(&self, command: &str) -> Result<Return>;
 }
 
-pub trait SessionSeed : SessionSeedBoxer {
+pub trait SessionSeed : SessionSeedBoxer + fmt::Debug {
     fn spawn(&self) -> Result<Box<Session>>;
     fn seed_type(&self) -> SeedType;
     fn as_mut_any(&mut self) -> &mut Any;

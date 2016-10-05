@@ -6,19 +6,19 @@ use ::util::errors::*;
 use ::virt::*;
 use ::virt::domain::snapshot::*;
 
-#[derive(Clone)]
-pub struct Template<'a, T: distro::Base + ?Sized> {
+#[derive(Clone, Debug)]
+pub struct Template<'a> {
     pub name: String,
     pub path_disk: String,
     pub resources: &'a ResourceBlend<'a>,
     pub session_seeds: SessionSeeds,
-    pub distro: Box<T>,
+    pub distro: Box<distro::Distro>,
 }
 
-impl<'a, T: distro::Base + ?Sized> Template<'a, T> {
+impl<'a> Template<'a> {
     pub fn new(resources: &'a ResourceBlend,
                template: &config::template::Template,
-               distro: Box<T>)
+               distro: Box<distro::Distro>)
                -> Result<Self> {
 
         let (dom, volume) = distro.build_image(None,
@@ -52,6 +52,6 @@ impl<'a, T: distro::Base + ?Sized> Template<'a, T> {
         })
     }
     pub fn destroy(&mut self) -> () {
-        ()
+        unimplemented!()
     }
 }

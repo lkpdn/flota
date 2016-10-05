@@ -1,4 +1,4 @@
-use ::distro;
+use std::sync::Arc;
 use ::flota::config;
 use ::flota::template;
 use ::util::errors::*;
@@ -7,16 +7,15 @@ pub mod host;
 use self::host::Host;
 
 #[derive(Debug)]
-pub struct Cluster {
+pub struct Cluster<'a> {
     pub name: String,
-    pub hosts: Vec<Host>,
+    pub hosts: Vec<Host<'a>>,
 }
 
-impl Cluster {
-    pub fn new<'a, D: ?Sized>(cluster: &config::cluster::Cluster,
-                              templates: &Vec<template::Template<D>>)
+impl<'a> Cluster<'a> {
+    pub fn new(cluster: &config::cluster::Cluster,
+               templates: &Vec<Arc<template::Template<'a>>>)
                               -> Result<Self>
-        where D: distro::Base + distro::InvasiveAdaption
     {
         let mut res = Vec::new();
         for host in cluster.hosts.iter() {

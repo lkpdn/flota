@@ -1,5 +1,5 @@
 use std::ops::Deref;
-use ::distro;
+use std::sync::Arc;
 use ::exec::session;
 use ::exec::session::*;
 use ::exec::session::ssh::SessSeedSsh;
@@ -12,13 +12,14 @@ use ::virt::network::*;
 use ::virt::storage::volume::*;
 
 #[derive(Debug)]
-pub struct Host {
+pub struct Host<'a> {
     pub domain: Domain,
+    pub template: Arc<template::Template<'a>>,
 }
 
-impl Host {
-    pub fn new<'a, D: ?Sized>(host: &config::cluster::Host, template: &template::Template<D>)
-        -> Result<Self> where D: distro::Base + distro::InvasiveAdaption
+impl<'a> Host<'a> {
+    pub fn new(host: &config::cluster::Host, template: &Arc<template::Template<'a>>)
+        -> Result<Self>
     {
         // make sure networks are all available.
         // all but mgmt subnet are without dhcp functionality
@@ -131,6 +132,7 @@ impl Host {
 
         Ok(Host {
             domain: dom,
+            template: template.clone(),
         })
     }
 }
