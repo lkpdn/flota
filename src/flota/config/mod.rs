@@ -59,14 +59,11 @@ macro_rules! unfold {
 }
 
 #[derive(Debug, Clone, RustcEncodable, PartialEq, Eq, Hash)]
+// XXX: local/remote choices might probably be sufficient
 pub enum ExecType {
     Console,
     Local,
-    Ssh {
-        user: String,
-        ip: IPv4,
-        options: Option<Vec<()>>
-    }
+    Ssh,
 }
 
 #[derive(Debug, Clone, RustcEncodable, PartialEq, Eq, Hash)]
@@ -74,7 +71,7 @@ pub struct Exec {
     /// of enum ExecType
     pub exec_type: ExecType,
     /// Hostname on which this Exec will be executed.
-    pub host: String,
+    pub host: Option<String>,
     /// For the time being this is supposed to be directly
     /// executed on the guest side.
     pub command: String,
@@ -101,7 +98,7 @@ impl Exec {
         match &*exec_type {
             "console" => Ok(Exec {
                 exec_type: ExecType::Console,
-                host: unfold!(tml, "host", String),
+                host: unfold!(tml, "host", String, optional),
                 command: command,
                 expect_stdout: expect_stdout,
                 expect_stderr: expect_stderr,
@@ -110,7 +107,7 @@ impl Exec {
             }),
             "local" => Ok(Exec {
                 exec_type: ExecType::Console,
-                host: "localhost".to_string(),
+                host: Some("localhost".to_string()),
                 command: command,
                 expect_stdout: expect_stdout,
                 expect_stderr: expect_stderr,
@@ -118,12 +115,8 @@ impl Exec {
                 abort_on_failure: abort_on_failure
             }),
             "ssh" => Ok(Exec {
-                exec_type: ExecType::Ssh {
-                    user: unfold!(tml, "user", String),
-                    ip: unfold!(tml, "ip", IPv4),
-                    options: None,
-                },
-                host: unfold!(tml, "host", String),
+                exec_type: ExecType::Ssh,
+                host: unfold!(tml, "host", String, optional),
                 command: command,
                 expect_stdout: expect_stdout,
                 expect_stderr: expect_stderr,

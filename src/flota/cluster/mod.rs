@@ -43,7 +43,8 @@ impl<'a> Cluster<'a> {
         ].iter() {
             for one_exec in tests.iter() {
                 // XXX: just ugly. help me.
-                if let Some(host) = hosts.iter().find(|h| h.domain.name() == one_exec.host) {
+                // XXX: lazy validation might be a bad choice.
+                if let Some(host) = hosts.iter().find(|h| Some(h.domain.name().to_string()) == one_exec.host) {
                     if let Some(seed_type) = SeedType::from_exec_type(&one_exec.exec_type) {
                         if let Some(seed) = host.template.session_seeds.iter().find(|s| {
                             s.seed_type() == seed_type
