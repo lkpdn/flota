@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use ::exec::session::*;
+use ::exec::session::ssh::SessSeedSsh;
 use ::flota::config;
 use ::flota::template;
 use ::util::errors::*;
@@ -49,7 +50,22 @@ impl<'a> Cluster<'a> {
                         if let Some(seed) = host.template.session_seeds.iter().find(|s| {
                             s.seed_type() == seed_type
                         }) {
-                            let sess = seed.spawn().unwrap();
+                            let sess = {
+                                // if session seed type is ssh, we update ip
+                                // because we had not known what management ip it would have.
+                                if seed_type == SeedType::Ssh {
+                                    let mut seed_updated = seed.clone();
+                                    let mgmt_ip = host.domain
+                                        .get_ip_in_network(host.template.resources.network().unwrap())
+                                        .unwrap();
+                                    seed_updated.as_mut_any()
+                                                .downcast_mut::<SessSeedSsh>()
+                                                .map(|s| s.override_ip(&mgmt_ip));
+                                    seed_updated.spawn().unwrap()
+                                } else {
+                                    seed.spawn().unwrap()
+                                }
+                            };
                             match sess.exec(&one_exec.command) {
                                 Ok(ret) => {
                                     info!("exit status: {}", ret.status);

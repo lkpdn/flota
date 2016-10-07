@@ -12,7 +12,10 @@ use url::Url;
 use xml;
 
 use ::distro;
+use ::distro::{UnattendedInstallation, UnattendedInstallationParams};
+use ::distro::centos::KSFloppy;
 use ::distro::centos::release_6::CentOS6;
+use ::flota::config;
 use ::util::*;
 use ::util::errors::*;
 use ::util::notify::tailf_background;
@@ -21,8 +24,6 @@ use ::virt::domain::Domain;
 use ::virt::network::Network;
 use ::virt::storage::pool::StoragePool;
 use ::virt::storage::volume::Volume;
-
-use ::distro::centos::KSFloppy;
 
 lazy_static! {
     pub static ref ISO: Url = Url::parse(
@@ -109,7 +110,7 @@ impl distro::Base for CentOS6_x8664 {
                    conn: &Conn,
                    storage_pool: &StoragePool,
                    network: &Network,
-                   unattended_script: &str)
+                   template: &config::template::Template)
                    -> Result<(Domain, Volume)> {
         let dom_name = match name {
             Some(nm) => nm,
@@ -127,9 +128,32 @@ impl distro::Base for CentOS6_x8664 {
         };
         let ks_path_on_host = Path::new("/tmp/ks.img");
         let ks_path_on_guest = Path::new("/ks.cfg");
-        let ks_floppy = KSFloppy::new(&ks_path_on_host, &ks_path_on_guest, unattended_script)
-            .unwrap();
-
+        let ks_script = match template.ks {
+            Some(ref s) => { s.clone() },
+            None => {
+                let ssh_priv_key = {
+                    let mut buf = String::new();
+                    let mut f = try!(File::open(template.mgmt_user_ssh_private_key.as_os_str()));
+                    try!(f.read_to_string(&mut buf));
+                    buf
+                };
+                let ssh_pub_key = {
+                    let mut buf = String::new();
+                    let mut f = try!(File::open(template.mgmt_user_ssh_public_key.as_os_str()));
+                    try!(f.read_to_string(&mut buf));
+                    buf
+                };
+                let params = UnattendedInstallationParams {
+                    mgmt_user_name: template.mgmt_user.clone(),
+                    mgmt_user_ssh_pubkey: ssh_pub_key,
+                    mgmt_user_ssh_privkey: ssh_priv_key,
+                };
+                self.unattended_script(&params)
+            }
+        };
+        let ks_floppy = try!(KSFloppy::new(&ks_path_on_host,
+                                      &ks_path_on_guest,
+                                      &ks_script));
         // 2. download installation files
         let tmp = Path::new("/tmp");
         let iso_local_path = tmp.join(ISO.last_segment().unwrap());

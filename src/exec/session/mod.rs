@@ -36,7 +36,7 @@ impl<T> SessionSeedBoxer for T where T: 'static + SessionSeed + Clone {
     }
 }
 
-pub fn try_spawn(seeds: SessionSeeds, prio: Vec<SeedType>) -> Result<Box<Session>> {
+pub fn try_spawn(seeds: &SessionSeeds, prio: Vec<SeedType>) -> Result<Box<Session>> {
     for cand in prio.iter() {
         if let Some(seed) = seeds.iter().find(|s| s.seed_type() == *cand) {
             match seed.spawn() {

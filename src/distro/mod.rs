@@ -1,4 +1,5 @@
 use std::fmt;
+use ::flota::config;
 use ::flota::config::cluster::Host as HostConfig;
 use ::exec::session::Session;
 use ::util::errors::*;
@@ -22,7 +23,7 @@ pub trait Base : fmt::Debug {
                    conn: &Conn,
                    storage_pool: &StoragePool,
                    network: &Network,
-                   unattended_script: &str)
+                   template: &config::template::Template)
                    -> Result<(Domain, Volume)>;
 }
 
@@ -56,6 +57,16 @@ pub trait InvasiveAdaption {
                            domain: &Domain,
                            template: &ResourceBlend)
                            -> Result<()>;
+}
+
+pub struct UnattendedInstallationParams {
+    mgmt_user_name: String,
+    mgmt_user_ssh_pubkey: String,
+    mgmt_user_ssh_privkey: String,
+}
+
+pub trait UnattendedInstallation {
+    fn unattended_script(&self, params: &UnattendedInstallationParams) -> String;
 }
 
 // off-the-shelf distros

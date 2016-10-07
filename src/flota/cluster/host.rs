@@ -52,49 +52,20 @@ impl<'a> Host<'a> {
         };
 
         // get mgmt interface's ip address
-        // N.B. would look nicer if virDomainInterfaceAddress could always be used
-        let mgmt_mac = dom.get_mac_of_if_in_network(template.resources
-                .network()
-                .as_ref()
-                .map(|n| n.name().to_owned())
-                .unwrap())
-            .unwrap();
-        debug!("mgmt interface's mac address: {} (domain: {})",
-               mgmt_mac,
-               &host.hostname);
+        let mgmt_ip = dom.get_ip_in_network(template.resources.network().unwrap()).unwrap();
 
-        // detect an obtained lease trying 20 times with the sleep interval 3 sec.
-        let mgmt_ip = match template.resources.network() {
-            Some(ref nw) => {
-                // retry:20, sleep:3sec
-                if let Some(ip) = nw.get_ip_linked_to_mac(&mgmt_mac, Some(20), Some(3)) {
-                    debug!("and its ip: {}", ip);
-                    ip
-                } else {
-                    return Err(format!("cannot detect ip on mgmt interface on domain: {}",
-                                       dom.name())
-                        .into());
-                }
+        // if session seed type is ssh, we update ip
+        // because we had not known what management ip it would have.
+        let mut seeds = template.session_seeds.clone();
+        for mut seed in seeds.iter_mut() {
+            if seed.seed_type() == SeedType::Ssh {
+                seed.as_mut_any()
+                    .downcast_mut::<SessSeedSsh>()
+                    .map(|s| s.override_ip(&mgmt_ip));
             }
-            None => panic!("yup"),
-        };
-
-        // implicit setups
-        let mut seeds = Vec::new();
-        for ref mut seed in template.session_seeds.clone().iter() {
-            if seed.seed_type() != SeedType::Ssh {
-                let s: Box<SessionSeed> = seed.clone();
-                seeds.push(s);
-                continue;
-            }
-            let mut new_seed = seed.clone();
-            if let Some(ref mut x) = new_seed.as_mut_any().downcast_mut::<SessSeedSsh>() {
-                x.ip = Some(mgmt_ip.clone());
-            }
-            seeds.push(new_seed);
         }
 
-        let session = session::try_spawn(seeds, vec![SeedType::Ssh]).unwrap();
+        let session = session::try_spawn(&seeds, vec![SeedType::Ssh]).unwrap();
         try!(template.distro.deref().adapt_network_state(
                 &host, unsafe { &*Box::into_raw(session) }, &dom, &template.resources));
 
@@ -113,7 +84,7 @@ impl<'a> Host<'a> {
         ].iter() {
             for one_exec in tests.iter() {
                 if let Some(seed_type) = SeedType::from_exec_type(&one_exec.exec_type) {
-                    if let Some(seed) = template.session_seeds.iter().find(|s| s.seed_type() == seed_type) {
+                    if let Some(ref seed) = seeds.iter().find(|s| s.seed_type() == seed_type) {
                         let sess = seed.spawn().unwrap();
                         match sess.exec(&one_exec.command) {
                             Ok(ret) => {

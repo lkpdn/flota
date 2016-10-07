@@ -44,6 +44,20 @@ impl Domain {
     pub fn networks(&self) -> Vec<&Network> {
         vec![]
     }
+    // TODO: secondary ip
+    pub fn get_ip_in_network(&self, network: &Network) -> Result<IPv4> {
+        if let Some(mgmt_mac) = self.get_mac_of_if_in_network(network.name().to_owned()) {
+            if let Some(ip) = network.get_ip_linked_to_mac(&mgmt_mac, Some(20), Some(3)) {
+                Ok(ip)
+            } else {
+                Err(format!("cannot detect ip of domain `{}` in network `{}`",
+                            self.name(), network.name()).into())
+            }
+        } else {
+            Err(format!("no interface found in network `{}` on domain `{}`",
+                        network.name(), self.name()).into())
+        }
+    }
     pub fn get_mac_of_if_in_network(&self, network: String) -> Option<String> {
         let desc = self.xml().unwrap();
         let mut p = Parser::new();

@@ -6,7 +6,6 @@ use std::sync::Arc;
 use time;
 use toml;
 use ::util::errors::*;
-use ::util::ipv4::IPv4;
 
 macro_rules! unfold {
     ( $toml:ident, $key:expr, $ty:tt, optional, $default:expr ) => {{

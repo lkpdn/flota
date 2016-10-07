@@ -18,6 +18,8 @@ pub struct SessSsh {
 impl Session for SessSsh {
     fn exec(&self, command: &str) -> Result<Return> {
         debug!("command: {}", command);
+        // deadline 10 seconds.
+        self.session.set_timeout(10000);
         match self.session.channel_session() {
             Ok(mut channel) => {
                 channel.exec(command).unwrap();
@@ -45,7 +47,6 @@ impl SessSsh {
         let mut sess = ssh2::Session::new().unwrap();
         sess.handshake(&tcp).unwrap();
         sess.userauth_pubkey_file(user, None, priv_key, None).unwrap();
-        sess.set_timeout(3000);
         sess.set_blocking(true);
         sess.set_allow_sigpipe(true);
         debug!("new session: {{user: {}, host: {}, priv_key: {}}}",
@@ -107,6 +108,9 @@ impl SessSeedSsh {
             port: port,
             priv_key: priv_key.to_path_buf(),
         })
+    }
+    pub fn override_ip(&mut self, ip: &IPv4) -> () {
+        self.ip = Some(ip.clone());
     }
 }
 

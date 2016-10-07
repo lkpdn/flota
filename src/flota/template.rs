@@ -25,7 +25,7 @@ impl<'a> Template<'a> {
                          resources.conn(),
                          resources.pool().as_ref().unwrap(),
                          resources.network().as_ref().unwrap(),
-                         template.ks.as_ref().unwrap())
+                         &template)
             .unwrap();
 
         let pool_root = resources.pool().as_ref().map(|ref p| p.target_path().unwrap()).unwrap();

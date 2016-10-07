@@ -82,6 +82,8 @@ pub struct Template {
     pub mgmt_user: String,
     /// SSH private key path
     pub mgmt_user_ssh_private_key: PathBuf,
+    /// SSH public key path
+    pub mgmt_user_ssh_public_key: PathBuf,
     /// Arc for global setting
     pub setting: Arc<Setting>,
 }
@@ -100,6 +102,9 @@ impl Template {
         let mgmt_user_ssh_private_key = unfold!(
             val, "mgmt_user_ssh_private_key", PathBuf, optional,
             PathBuf::from(format!("/home/{}/.ssh/id_rsa", mgmt_user)));
+        let mgmt_user_ssh_public_key = unfold!(
+            val, "mgmt_user_ssh_public_key", PathBuf, optional,
+            PathBuf::from(format!("/home/{}/.ssh/id_rsa.pub", mgmt_user)));
         Ok(Template {
             name: name,
             arch: arch,
@@ -107,6 +112,7 @@ impl Template {
             ks: ks,
             mgmt_user: mgmt_user,
             mgmt_user_ssh_private_key: mgmt_user_ssh_private_key,
+            mgmt_user_ssh_public_key: mgmt_user_ssh_public_key,
             setting: setting.clone(),
         })
     }
