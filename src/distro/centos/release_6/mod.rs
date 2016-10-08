@@ -17,32 +17,29 @@ impl<T: CentOS6> InvasiveAdaption for T {
                            template: &ResourceBlend)
                            -> Result<()> {
         try!(sess.exec(format!("\
-                       sudo sed -i 's/^HOSTNAME=.*$/HOSTNAME={}/' /etc/sysconfig/network;\
-                       sudo grep -qE '^127.0.0.1   {}' /etc/hosts || sudo sed -i \
-                       '1i\\127.0.0.1   {}' /etc/hosts;sudo hostname {}",
-                       host.hostname,
-                       host.hostname,
-                       host.hostname,
-                       host.hostname).as_str()));
+                       sudo sed -i 's/^HOSTNAME=.*$/HOSTNAME={host}/' /etc/sysconfig/network;\
+                       sudo grep -qE '^127.0.0.1   {host}' /etc/hosts || sudo sed -i \
+                       '1i\\127.0.0.1   {host}' /etc/hosts;sudo hostname {host}",
+                       host = host.hostname).as_str()));
         for interface in &host.interfaces {
             if let Some(mac) = domain.get_mac_of_ip(&interface.ip) {
                 let cfg = format!("\
-                            DEVICE={}\n\
+                            DEVICE={dev}\n\
                             BOOTPROTO=none\n\
-                            HWADDR={}\n\
-                            IPADDR={}\n\
-                            NETMASK={}\n\
-                            GATEWAY={}\n\
+                            HWADDR={mac}\n\
+                            IPADDR={ip}\n\
+                            NETMASK={mask}\n\
+                            GATEWAY={gw}\n\
                             IPV6INIT=\"no\"\n\
                             MTU=\"1500\"\n\
                             NM_CONTROLLED=\"no\"\n\
                             ONBOOT=\"yes\"\n\
                             TYPE=\"Ethernet\"",
-                    interface.dev,
-                    mac,
-                    interface.ip.ip(),
-                    interface.ip.mask(),
-                    interface.ip.nth_sibling(1));
+                    dev = interface.dev,
+                    mac = mac,
+                    ip = interface.ip.ip(),
+                    mask = interface.ip.mask(),
+                    gw = interface.ip.nth_sibling(1));
                 try!(sess.exec(format!("\
                                cat <<\"EOF\" | sudo tee \
                                /etc/sysconfig/network-scripts/ifcfg-{}\n{}\nEOF\n\n",
@@ -75,9 +72,7 @@ impl<T: CentOS6> InvasiveAdaption for T {
                            cfg).as_str()));
         }
 
-        // XXX: one of the ugliest part human being ever seen.
-        // the reason iproute2 are used instead of network service utility or
-        // direct ifconfig is that in the previous part we changed ifcfgs online.
+        // FIXME: to make 100% sure connection persiste (whether or not with ssh2).
         try!(sess.exec(r#"sudo nohup sh -c '
              ls /sys/class/net | xargs -i ip l set dev {} down;
              cat /dev/null > /etc/udev/rules.d/70-persistent-net.rules;

@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::error::Error as StdError;
 use ssh2;
 use ssh2::{CheckResult, HostKeyType, KnownHostFileKind, KnownHostKeyFormat};
 use std::env;
@@ -18,22 +19,35 @@ pub struct SessSsh {
 impl Session for SessSsh {
     fn exec(&self, command: &str) -> Result<Return> {
         debug!("command: {}", command);
-        // deadline 10 seconds.
-        self.session.set_timeout(10000);
+        // deadline 30 seconds.
+        self.session.set_timeout(30 * 1000);
         match self.session.channel_session() {
             Ok(mut channel) => {
                 channel.exec(command).unwrap();
                 let mut stdout = String::new();
                 let mut stderr = String::new();
-                try!(channel.read_to_string(&mut stdout));
-                try!(channel.stderr().read_to_string(&mut stderr));
+                loop {
+                    match (channel.read_to_string(&mut stdout),
+                           channel.stderr().read_to_string(&mut stderr)) {
+                        (Ok(_), Ok(_)) => { break },
+                        (Err(e), _) | (_, Err(e)) => {
+                            // XXX
+                            if e.description().eq("would block") {
+                                continue
+                            }
+                            return Err(e.into())
+                        }
+                    }
+                }
                 Ok(Return {
                     stdout: stdout,
                     stderr: stderr,
                     status: channel.exit_status().unwrap(),
                 })
             },
-            Err(e) => Err(e.into())
+            Err(e) => {
+                Err(e.into())
+            }
         }
     }
 }
@@ -48,6 +62,7 @@ impl SessSsh {
         sess.handshake(&tcp).unwrap();
         sess.userauth_pubkey_file(user, None, priv_key, None).unwrap();
         sess.set_blocking(true);
+        sess.set_keepalive(false, 5);
         sess.set_allow_sigpipe(true);
         debug!("new session: {{user: {}, host: {}, priv_key: {}}}",
                user, ip.ip(), priv_key.to_str().unwrap());

@@ -331,9 +331,7 @@ impl distro::Base for CentOS6_x8664 {
                     virDomainDefineXML(conn.raw(), CString::new(format!("{}", x)).unwrap().as_ptr())
                 }
             };
-            if virDomainCreate(new_dom) < 0 {
-                println!("oh no! yes we can!");
-            }
+            let _ = virDomainCreate(new_dom);
             Ok((Domain { raw: new_dom }, volume))
         }
     }

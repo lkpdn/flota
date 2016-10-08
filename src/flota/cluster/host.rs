@@ -1,3 +1,4 @@
+use nix::unistd::sleep;
 use std::ops::Deref;
 use std::sync::Arc;
 use ::exec::session;
@@ -66,8 +67,25 @@ impl<'a> Host<'a> {
         }
 
         let session = session::try_spawn(&seeds, vec![SeedType::Ssh]).unwrap();
-        try!(template.distro.deref().adapt_network_state(
-                &host, unsafe { &*Box::into_raw(session) }, &dom, &template.resources));
+        if let Err(_) = template.distro.deref().adapt_network_state(
+                &host, unsafe { &*Box::into_raw(session) }, &dom, &template.resources) {
+            // XXX: if we seem to have failed to adapt network state,
+            //      we try to connect again. max retry count is ten, sleep
+            //      interval is 3sec.
+            for i in 0..10 {
+                match session::try_spawn(&seeds, vec![SeedType::Ssh]) {
+                    Err(_) if i >= 9 => {
+                        return Err("network adaption failed".into())
+                    },
+                    Ok(_) => { break },
+                    _ => {
+                        sleep(3);
+                        continue
+                    }
+                }
+            }
+
+        }
 
         // update host-side /etc/hosts
         for interface in host.interfaces.iter() {
