@@ -7,7 +7,7 @@ use ::util::ipv4::IPv4;
 use super::Exec;
 use super::template::Template;
 
-#[derive(Debug, Clone, RustcEncodable, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct HostInterface {
     /// Network interface dev name on guest side.
     pub dev: String,
@@ -26,7 +26,7 @@ impl HostInterface {
     }
 }
 
-#[derive(Debug, Clone, RustcEncodable, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Host {
     /// Hostname.
     pub hostname: String,
@@ -117,7 +117,7 @@ impl Host {
     }
 }
 
-#[derive(Debug, Clone, RustcEncodable, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Cluster {
     /// Cluster name arbitrarily chosen.
     pub name: String,

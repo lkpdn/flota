@@ -7,7 +7,7 @@ use std::mem;
 
 use super::errors::*;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct IPv4 {
     addr: Vec<u8>,
     mask: Vec<u8>,

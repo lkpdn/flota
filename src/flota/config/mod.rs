@@ -1,9 +1,10 @@
+use serde_json;
 use std::collections::HashSet;
+use std::convert::AsRef;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
-use time;
 use toml;
 use ::util::errors::*;
 
@@ -57,7 +58,7 @@ macro_rules! unfold {
     }};
 }
 
-#[derive(Debug, Clone, RustcEncodable, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 // XXX: local/remote choices might probably be sufficient
 pub enum ExecType {
     Console,
@@ -65,7 +66,7 @@ pub enum ExecType {
     Ssh,
 }
 
-#[derive(Debug, Clone, RustcEncodable, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Exec {
     /// of enum ExecType
     pub exec_type: ExecType,
@@ -127,6 +128,7 @@ impl Exec {
     }
 }
 
+pub mod store;
 pub mod setting;
 pub mod template;
 pub mod cluster;
@@ -135,11 +137,19 @@ use self::setting::Setting;
 use self::template::Template;
 use self::cluster::Cluster;
 
-#[derive(Debug, Clone, RustcEncodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     pub setting: Arc<Setting>,
     pub templates: HashSet<Arc<Template>>,
     pub clusters: HashSet<Arc<Cluster>>,
+}
+
+// XXX: TryFrom
+impl From<Vec<u8>> for Config {
+    fn from(v: Vec<u8>) -> Self {
+        let buf = String::from_utf8(v).unwrap();
+        serde_json::from_str(&buf).unwrap()
+    }
 }
 
 impl Config {
@@ -197,20 +207,5 @@ impl Config {
             templates: templates,
             clusters: clusters,
         })
-    }
-    pub fn as_toml(&self) -> toml::Value {
-        toml::encode(self)
-    }
-    pub fn differ_from(&self, config: &Self) -> bool {
-        self.as_toml() == config.as_toml()
-    }
-    pub fn snapshot(&self) -> Result<()> {
-        let save_to = ::consts::CONFIG_HISTORY_DIR.join(
-            format!("config-{}", time::now().to_timespec().sec).as_str());
-        if let Ok(mut f) = File::create(save_to.to_str().unwrap()) {
-            write!(&mut f, "{}", toml::encode_str(&self)).map_err(|e| e.into())
-        } else {
-            Err("failed to create snapshot file".into())
-        }
     }
 }

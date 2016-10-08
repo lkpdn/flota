@@ -71,9 +71,13 @@ quick-error = "1.1.0"
 rust-crypto = "^0.2"
 rustc-serialize = "0.3.19"
 RustyXML = "0.1.1"
+serde = "0.8"
+serde_derive = "0.8"
+serde_json = "0.8"
 ssh2 = "0.2"
 term = "0.4.4"
 time = "0.1"
 toml = "0.2"
+unqlite = "1.*"
 url = { git = "https://github.com/servo/rust-url" }
 uuid = { version = "0.2", features = ["v4"] }

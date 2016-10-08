@@ -1,4 +1,7 @@
-#![feature(concat_idents, inclusive_range_syntax, trace_macros, type_macros, custom_attribute)]
+#![feature(concat_idents,
+           custom_attribute,
+           inclusive_range_syntax,
+           rustc_macro)]
 #![recursion_limit = "1024"]
 extern crate ansi_term;
 extern crate bit_vec;
@@ -20,9 +23,14 @@ extern crate notify;
 extern crate quick_error;
 extern crate rustc_serialize;
 extern crate ssh2;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde;
+extern crate serde_json;
 extern crate term;
 extern crate time;
 extern crate toml;
+extern crate unqlite;
 extern crate url;
 extern crate uuid;
 extern crate xml;
@@ -53,6 +61,7 @@ use util::notify::config_hup;
 pub mod flota;
 use flota::cluster::Cluster;
 use flota::config::*;
+use flota::config::store::*;
 use flota::config::template::Ingredient;
 use flota::template::Template;
 
@@ -178,7 +187,9 @@ fn main() {
     // verify environment
     verify_env().unwrap();
 
-    let mut first_cycle = true;
+    let config_store = unqlite_backed::ConfigStore::new(
+        ::consts::CONFIG_HISTORY_DIR.join("hoge").as_path()
+    );
 
     // outermost loop
     'init: loop {
@@ -186,6 +197,7 @@ fn main() {
         match Config::from_toml_file(Path::new(&config_path)) {
             Ok(config) => {
                 debug!("{:#?}", config);
+                config_store.update(&config).unwrap();
 
                 // set up main connection
                 let conn = Conn::new(&config.setting.hypervisor);
@@ -275,12 +287,7 @@ fn main() {
                             unsafe { CONFIG_RELOAD = false };
                             match Config::from_toml_file(Path::new(&config_path)) {
                                 Ok(ref new_config) => {
-                                    if config.differ_from(new_config) {
-                                        // even if CONFIG_RELOAD was set true and reached here,
-                                        // it won't break inner loop and reset config unless the
-                                        // new config substantially differs from old one.
-                                        new_config.snapshot() 
-                                                  .expect("cannot save config snapshot");
+                                    if let Ok(true) = config_store.update(&new_config) {
                                         break 'cycle;
                                     }
                                 },
@@ -293,18 +300,10 @@ fn main() {
                         break 'init;
                     }
                 }
-                first_cycle = false;
             },
             Err(e) => {
                 error!("{}", e);
-                if first_cycle { 
-                    break
-                } else {
-                    // when broken config left for a long time,
-                    // you'd get error message flood so slightly long
-                    // sleep time chosen here
-                    sleep(20);
-                }
+                sleep(5);
             }
         }
     }
