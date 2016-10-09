@@ -1,8 +1,10 @@
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Arc;
 use toml;
 use ::util::errors::*;
 use ::util::ipv4::IPv4;
+use ::util::url::Url;
 
 use super::Exec;
 use super::template::Template;
@@ -118,9 +120,25 @@ impl Host {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum WatchPoint {
+    Git {
+        uri: Url,
+        remote: String,
+        refs: Vec<String>,
+        checkout_dir: PathBuf,
+    },
+    File {
+        path: PathBuf,
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Cluster {
     /// Cluster name arbitrarily chosen.
     pub name: String,
+    /// Watchpoints. Empty array is okay, in that case only this
+    /// cluster's config change triggers test reruns.
+    pub watchpoints: Vec<WatchPoint>,
     /// Hosts which belong to this cluster. Note that
     /// these are set up in the same order.
     pub hosts: Vec<Host>,
@@ -143,6 +161,37 @@ pub struct Cluster {
 impl Cluster {
     pub fn from_toml(tml: &toml::Value, templates: &HashSet<Arc<Template>>) -> Result<Cluster> {
         let name = tml.lookup("name").map(|val| val.as_str().unwrap()).unwrap();
+        let watchpoints = match tml.lookup("watchpoint") {
+            Some(&toml::Value::Array(ref tml_watchpoints)) => {
+                let mut watchpoints = Vec::new();
+                for tml_watchpoint in tml_watchpoints {
+                    let ty = unfold!(tml_watchpoint, "type", String);
+                    // WatchPoint::Git
+                    if ty == "git" {
+                        if let Some(&toml::Value::Array(ref refs)) = tml_watchpoint.lookup("refs") {
+                            watchpoints.push(WatchPoint::Git {
+                                uri: unfold!(tml_watchpoint, "uri", Url),
+                                remote: unfold!(tml_watchpoint, "remote", String, optional, "origin".to_string()),
+                                refs: refs.iter().map(|s| s.as_str().unwrap().to_owned())
+                                    .collect::<Vec<_>>(),
+                                checkout_dir: unfold!(tml_watchpoint, "checkout_dir", PathBuf),
+                            });
+                        } else {
+                            return Err("watchpoint type git requires branches array".into())
+                        }
+                    // WatchPoint::File
+                    } else if ty == "file" {
+                        watchpoints.push(WatchPoint::File {
+                            path: unfold!(tml_watchpoint, "path", PathBuf),
+                        });
+                    } else {
+                        return Err(format!("unsupported watchpoint type: {}", ty).into())
+                    }
+                }
+                watchpoints
+            },
+            _ => { vec![] }
+        };
         let hosts = match tml.lookup("host") {
             Some(&toml::Value::Array(ref tml_hsts)) => {
                 let mut hsts = Vec::new();
@@ -194,6 +243,7 @@ impl Cluster {
             .unwrap_or(true);
         Ok(Cluster {
             name: name.to_owned(),
+            watchpoints: watchpoints,
             hosts: hosts,
             pre_tests: pre_tests,
             tests: tests,

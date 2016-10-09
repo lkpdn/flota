@@ -55,26 +55,28 @@ fn download_iso(local_path: &Path) -> Result<()> {
 }
 
 fn download_iso_md5checked(local_path: &Path) -> Result<()> {
-    let iso_filename = ISO.last_segment().unwrap();
-    let iso_md5sum_filename = ISO_MD5SUM.last_segment().unwrap();
-    let tmp = Path::new("/tmp");
-    let md5_local_pathbuf = tmp.join(&iso_md5sum_filename);
-    download_file(&ISO_MD5SUM, &md5_local_pathbuf).unwrap();
-    let mut md5_file = File::open(md5_local_pathbuf.to_str().unwrap()).unwrap();
-    let mut buffer = String::new();
-    md5_file.read_to_string(&mut buffer).unwrap();
-    let md5s = buffer.lines()
-        // the md5sum.txt is assumed to have multiple entries
-        // for each type of iso files.
-        .filter(|l| l.ends_with(&iso_filename))
-        .map(|l| l.split(' ').collect::<Vec<&str>>()[0])
-        .collect::<Vec<_>>();
-    if md5s.len() == 1 {
-        md5sum::download_file(&ISO, local_path, md5s[0])
-    } else {
-        warn!("skip md5 checking");
-        download_iso(local_path)
-    }
+    if ! local_path.exists() {
+        let iso_filename = ISO.last_segment().unwrap();
+        let iso_md5sum_filename = ISO_MD5SUM.last_segment().unwrap();
+        let tmp = Path::new("/tmp");
+        let md5_local_pathbuf = tmp.join(&iso_md5sum_filename);
+        download_file(&ISO_MD5SUM, &md5_local_pathbuf).unwrap();
+        let mut md5_file = File::open(md5_local_pathbuf.to_str().unwrap()).unwrap();
+        let mut buffer = String::new();
+        md5_file.read_to_string(&mut buffer).unwrap();
+        let md5s = buffer.lines()
+            // the md5sum.txt is assumed to have multiple entries
+            // for each type of iso files.
+            .filter(|l| l.ends_with(&iso_filename))
+            .map(|l| l.split(' ').collect::<Vec<&str>>()[0])
+            .collect::<Vec<_>>();
+        if md5s.len() == 1 {
+            md5sum::download_file(&ISO, local_path, md5s[0])
+        } else {
+            warn!("skip md5 checking");
+            download_iso(local_path)
+        }
+    } else { Ok(()) }
 }
 
 fn download_vmlinuz(local_path: &Path) -> Result<()> {

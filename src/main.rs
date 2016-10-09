@@ -11,6 +11,7 @@ extern crate env_logger;
 #[macro_use]
 extern crate error_chain;
 extern crate getopts;
+extern crate git2;
 extern crate libc;
 #[macro_use]
 extern crate log;
@@ -59,10 +60,9 @@ use util::errors::*;
 use util::notify::config_hup;
 
 pub mod flota;
-use flota::cluster::Cluster;
 use flota::config::*;
-use flota::config::store::*;
 use flota::config::template::Ingredient;
+use flota::manager::Manager;
 use flota::template::Template;
 
 #[macro_use]
@@ -73,6 +73,9 @@ use virt::storage::pool::StoragePool;
 
 pub mod distro;
 use distro::Distros;
+
+pub mod store;
+use store::ConfigStore;
 
 fn print_usage(opts: Options) {
     let brief = format!("Usage: {}", *PROGNAME);
@@ -195,7 +198,7 @@ fn main() {
     // verify environment
     verify_env().unwrap();
 
-    let config_store = unqlite_backed::ConfigStore::new(
+    let config_store = store::unqlite_backed::ConfigStore::new(
         ::consts::CONFIG_HISTORY_DIR.join("hoge").as_path()
     );
 
@@ -286,13 +289,17 @@ fn main() {
                     // construct (+ run tests on) clusters.
                     // TODO: safely parallelize
                     for ref cluster in &config.clusters {
-                        let _c = match Cluster::new(cluster, &templates) {
-                            Ok(c) => c,
+                        match Manager::run_cluster(cluster, &templates) {
+                            Ok(true) => {
+                                info!("cluster {}: ok", cluster.name);
+                            },
+                            Ok(false) => {
+                                info!("cluster {}: failed", cluster.name);
+                            },
                             Err(e) => {
-                                error!("{}", e);
-                                continue;
+                                error!("cluster {} error: {}", cluster.name, e);
                             }
-                        };
+                        }
                     }
 
                     if ! config.setting.daemonized ||

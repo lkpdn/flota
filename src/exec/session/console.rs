@@ -1,6 +1,7 @@
 use std::any::Any;
+use ::exec::Output;
+use ::exec::session::{SeedType, Session, SessionSeed};
 use ::util::errors::*;
-use super::{Return, SeedType, Session, SessionSeed};
 
 #[derive(Debug, Clone)]
 pub struct SessConsole {}
@@ -21,7 +22,7 @@ impl SessionSeed for SessSeedConsole {
 
 impl Session for SessConsole {
     #[allow(unused_variables)]
-    fn exec(&self, command: &str) -> Result<Return> {
+    fn exec(&self, command: &str) -> Result<Output> {
         unimplemented!()
     }
 }

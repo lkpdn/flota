@@ -128,7 +128,6 @@ impl Exec {
     }
 }
 
-pub mod store;
 pub mod setting;
 pub mod template;
 pub mod cluster;

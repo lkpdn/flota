@@ -6,9 +6,10 @@ use std::env;
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
+use ::exec::Output;
+use ::exec::session::{SeedType, Session, SessionSeed};
 use ::util::errors::*;
 use ::util::ipv4::IPv4;
-use super::{Return, SeedType, Session, SessionSeed};
 
 #[allow(dead_code)]
 pub struct SessSsh {
@@ -17,7 +18,7 @@ pub struct SessSsh {
 }
 
 impl Session for SessSsh {
-    fn exec(&self, command: &str) -> Result<Return> {
+    fn exec(&self, command: &str) -> Result<Output> {
         debug!("command: {}", command);
         // deadline 30 seconds.
         self.session.set_timeout(30 * 1000);
@@ -39,10 +40,10 @@ impl Session for SessSsh {
                         }
                     }
                 }
-                Ok(Return {
-                    stdout: stdout,
-                    stderr: stderr,
-                    status: channel.exit_status().unwrap(),
+                Ok(Output {
+                    stdout: Some(stdout),
+                    stderr: Some(stderr),
+                    status: channel.exit_status().ok(),
                 })
             },
             Err(e) => {

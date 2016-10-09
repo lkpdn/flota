@@ -46,7 +46,7 @@ fn md5_input(hasher: &mut Md5, in_channel: Receiver<Vec<u8>>) {
     }
 }
 
-pub fn compare_md5(local_path: &Path, md5: &str) -> Result<bool> {
+pub fn calc_md5(local_path: &Path) -> Result<String> {
     let (sender, receiver) = sync_channel(16);
     let t = local_path.to_path_buf();
     let sender = thread::spawn(move || read_file(t, 10240, sender));
@@ -54,10 +54,16 @@ pub fn compare_md5(local_path: &Path, md5: &str) -> Result<bool> {
     md5_input(&mut hasher, receiver);
     match sender.join() {
         Ok(_) => {
-            let md5_result = hasher.result_str();
-            Ok(md5_result == md5)
+            Ok(hasher.result_str())
         },
         Err(_) => Err("failed to compare md5. maybe file reader aborted.".into())
+    }
+}
+
+pub fn compare_md5(local_path: &Path, md5: &str) -> Result<bool> {
+    match calc_md5(local_path) {
+        Ok(calc) => { Ok(calc == md5) },
+        Err(e) => Err(e),
     }
 }
 

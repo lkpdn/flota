@@ -94,31 +94,6 @@ impl<'a> Host<'a> {
                                   &host.hostname));
         }
 
-        // solo pre-tests --> tests --> post-tests
-        for tests in vec![
-            &host.solo_pre_tests,
-            &host.solo_tests,
-            &host.solo_post_tests
-        ].iter() {
-            for one_exec in tests.iter() {
-                if let Some(seed_type) = SeedType::from_exec_type(&one_exec.exec_type) {
-                    if let Some(ref seed) = seeds.iter().find(|s| s.seed_type() == seed_type) {
-                        let sess = seed.spawn().unwrap();
-                        match sess.exec(&one_exec.command) {
-                            Ok(ret) => {
-                                info!("exit status: {}", ret.status);
-                                info!("stdout: {}", ret.stdout);
-                                info!("stderr: {}", ret.stderr);
-                            },
-                            Err(e) => {
-                                error!("{}", e);
-                            }
-                        }
-                    }
-                } else { panic!("would not panic") }
-            }
-        }
-
         Ok(Host {
             domain: dom,
             template: template.clone(),

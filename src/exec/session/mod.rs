@@ -2,13 +2,14 @@ use std::any::Any;
 use std::fmt;
 use ::flota::config;
 use ::util::errors::*;
+use super::Output;
 
 pub mod ssh;
 pub mod console;
 pub mod local;
 
 pub trait Session {
-    fn exec(&self, command: &str) -> Result<Return>;
+    fn exec(&self, command: &str) -> Result<Output>;
 }
 
 pub trait SessionSeed : SessionSeedBoxer + fmt::Debug {
@@ -63,11 +64,4 @@ impl SeedType {
             config::ExecType::Local => { Some(SeedType::Local) },
         }
     }
-}
-
-#[derive(Debug)]
-pub struct Return {
-    pub stdout: String,
-    pub stderr: String,
-    pub status: i32,
 }
