@@ -39,7 +39,7 @@ use getopts::Options;
 use std::env;
 use std::fs;
 use std::os::unix::io::AsRawFd;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use nix::sys::signal;
 use nix::unistd::{close, dup2, fork, ForkResult, getppid, sleep};
 use std::path::Path;
@@ -80,6 +80,10 @@ fn print_usage(opts: Options) {
 }
 
 static mut CONFIG_RELOAD: bool = false;
+static mut SIGTERM_RECVED: bool = false;
+lazy_static! {
+    static ref WAIT_FOR: Mutex<Vec<i32>> = Mutex::new(vec![]);
+}
 
 #[allow(unused_variables)]
 fn daemonize() -> Result<()> {
@@ -117,6 +121,10 @@ fn daemonize() -> Result<()> {
 
 extern "C" fn config_reload(_: i32) {
     unsafe { CONFIG_RELOAD = true };
+}
+
+extern "C" fn sigterm_received(_: i32) {
+    unsafe { SIGTERM_RECVED = true };
 }
 
 fn verify_env() -> Result<()> {
@@ -193,6 +201,7 @@ fn main() {
 
     // outermost loop
     'init: loop {
+        if unsafe { SIGTERM_RECVED } { break }
         // read toml
         match Config::from_toml_file(Path::new(&config_path)) {
             Ok(config) => {
@@ -224,12 +233,18 @@ fn main() {
                                 signal::SigHandler::Handler(config_reload),
                                 signal::SaFlags::empty(),
                                 signal::SigSet::empty());
+                            let term_action = signal::SigAction::new(
+                                signal::SigHandler::Handler(sigterm_received),
+                                signal::SaFlags::empty(),
+                                signal::SigSet::empty());
                             unsafe {
                                 signal::sigaction(signal::SIGHUP, &hup_action)
                                     .expect("sigaction for SIGHUP failed");
+                                signal::sigaction(signal::SIGTERM, &term_action)
+                                    .expect("sigaction for SIGTERM failed");
+                                WAIT_FOR.lock().unwrap().push(config_hup(Path::new(&config_path))
+                                    .expect("failed to setup config_hup"));
                             }
-                            let _child = config_hup(Path::new(&config_path))
-                                .expect("failed to setup config_hup");
                         },
                         Err(_) => {}
                     }
@@ -280,24 +295,22 @@ fn main() {
                         };
                     }
 
-                    // if in daemon-mode, sleep five seconds and loop to next.
-                    if config.setting.daemonized {
-                        sleep(5);
-                        if unsafe { CONFIG_RELOAD } {
-                            unsafe { CONFIG_RELOAD = false };
-                            match Config::from_toml_file(Path::new(&config_path)) {
-                                Ok(ref new_config) => {
-                                    if let Ok(true) = config_store.update(&new_config) {
-                                        break 'cycle;
-                                    }
-                                },
-                                Err(e) => {
-                                    error!("{}", e);
+                    if ! config.setting.daemonized ||
+                       unsafe { SIGTERM_RECVED } { break 'init }
+
+                    sleep(5);
+                    if unsafe { CONFIG_RELOAD } {
+                        unsafe { CONFIG_RELOAD = false };
+                        match Config::from_toml_file(Path::new(&config_path)) {
+                            Ok(ref new_config) => {
+                                if let Ok(true) = config_store.update(&new_config) {
+                                    break 'cycle;
                                 }
+                            },
+                            Err(e) => {
+                                error!("{}", e);
                             }
                         }
-                    } else {
-                        break 'init;
                     }
                 }
             },
@@ -306,5 +319,9 @@ fn main() {
                 sleep(5);
             }
         }
+    }
+    for child in WAIT_FOR.lock().unwrap().iter() {
+        signal::kill(*child, libc::SIGKILL)
+            .expect(format!("failed to send SIGKILL to {}", child).as_str());
     }
 }
