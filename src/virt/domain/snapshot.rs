@@ -73,10 +73,10 @@ impl DomainSnapshot {
             }
         }
     }
-    pub fn get_disk_path(&self) -> String {
+    pub fn disk_path(&self) -> String {
         self.disk_path.clone()
     }
-    pub fn get_ram_path(&self) -> String {
+    pub fn ram_path(&self) -> String {
         self.ram_path.clone()
     }
     pub fn delete(&self) -> Result<()> {

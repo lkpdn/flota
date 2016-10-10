@@ -12,7 +12,7 @@ resource!(Network, virNetwork);
 
 impl Network {
     /// get DHCP leases.
-    pub fn get_leases(&self) -> Result<Vec<virNetworkDHCPLease>> {
+    fn leases(&self) -> Result<Vec<virNetworkDHCPLease>> {
         let mut leases: *mut virNetworkDHCPLeasePtr = ptr::null_mut();
         match unsafe { virNetworkGetDHCPLeases(self.raw(), ptr::null(), &mut leases, 0) } {
             -1 => Err(format!("failed to get leases info of: {}", self.name()).into()),
@@ -28,15 +28,15 @@ impl Network {
         }
     }
     /// get primary ip associated to mac
-    pub fn get_ip_linked_to_mac(&self,
-                                mac: &str,
-                                retry: Option<u32>,
-                                sleep: Option<u32>)
-                                -> Option<IPv4> {
+    pub fn ip_linked_to_mac(&self,
+                            mac: &str,
+                            retry: Option<u32>,
+                            sleep: Option<u32>)
+                            -> Option<IPv4> {
         let mut retry_count = retry.unwrap_or(0);
         let siesta = sleep.unwrap_or(1);
         loop {
-            match self.get_leases() {
+            match self.leases() {
                 Ok(ref leases) => {
                     for lease in leases.iter() {
                         if let Ok(mc) = unsafe { CStr::from_ptr(lease.mac).to_str() } {

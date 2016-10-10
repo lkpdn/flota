@@ -117,7 +117,7 @@ impl Manager {
     }
     pub fn run_host_test(config: &config::cluster::Host, host: &Host) -> Result<Vec<ExecResult>> {
         // XXX: duplicate code
-        let mgmt_ip = host.domain.get_ip_in_network(host.template.resources.network().unwrap()).unwrap();
+        let mgmt_ip = host.domain.ip_in_network(host.template.resources.network().unwrap()).unwrap();
         let mut seeds = host.template.session_seeds.clone();
         for mut seed in seeds.iter_mut() {
             if seed.seed_type() == SeedType::Ssh {
@@ -185,7 +185,7 @@ impl Manager {
                                 if seed_type == SeedType::Ssh {
                                     let mut seed_updated = seed.clone();
                                     let mgmt_ip = host.domain
-                                        .get_ip_in_network(host.template.resources.network().unwrap())
+                                        .ip_in_network(host.template.resources.network().unwrap())
                                         .unwrap();
                                     seed_updated.as_mut_any()
                                                 .downcast_mut::<SessSeedSsh>()
@@ -269,6 +269,9 @@ impl Manager {
                         cluster_test_result: result.clone(),
                     };
                     try!(store.set(&key, &test_result));
+                }
+                for host in hosts.iter() {
+                    host.shutdown();
                 }
             }
         }

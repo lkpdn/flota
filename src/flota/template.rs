@@ -45,7 +45,7 @@ impl<'a> Template<'a> {
 
         Ok(Template {
             name: template.name.to_owned(),
-            path_disk: volume.get_path().to_owned(),
+            path_disk: volume.path().to_owned(),
             resources: resources,
             session_seeds: session_seeds,
             distro: distro,

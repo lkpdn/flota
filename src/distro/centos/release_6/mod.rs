@@ -22,7 +22,7 @@ impl<T: CentOS6> InvasiveAdaption for T {
                        '1i\\127.0.0.1   {host}' /etc/hosts;sudo hostname {host}",
                        host = host.hostname).as_str()));
         for interface in &host.interfaces {
-            if let Some(mac) = domain.get_mac_of_ip(&interface.ip) {
+            if let Some(mac) = domain.mac_of_ip(&interface.ip) {
                 let cfg = format!("\
                             DEVICE={dev}\n\
                             BOOTPROTO=none\n\
@@ -49,7 +49,7 @@ impl<T: CentOS6> InvasiveAdaption for T {
         }
 
         // get mac address which belongs to the default network, i.e. mgmt interface mac.
-        if let Some(mac) = domain.get_mac_of_if_in_network(
+        if let Some(mac) = domain.mac_in_network(
             match template.network() {
                 Some(ref n) => n.name().to_owned(),
                 None => panic!("a"),

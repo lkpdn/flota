@@ -45,9 +45,9 @@ impl Domain {
         vec![]
     }
     // TODO: secondary ip
-    pub fn get_ip_in_network(&self, network: &Network) -> Result<IPv4> {
-        if let Some(mgmt_mac) = self.get_mac_of_if_in_network(network.name().to_owned()) {
-            if let Some(ip) = network.get_ip_linked_to_mac(&mgmt_mac, Some(20), Some(3)) {
+    pub fn ip_in_network(&self, network: &Network) -> Result<IPv4> {
+        if let Some(mgmt_mac) = self.mac_in_network(network.name().to_owned()) {
+            if let Some(ip) = network.ip_linked_to_mac(&mgmt_mac, Some(20), Some(3)) {
                 Ok(ip)
             } else {
                 Err(format!("cannot detect ip of domain `{}` in network `{}`",
@@ -58,7 +58,7 @@ impl Domain {
                         network.name(), self.name()).into())
         }
     }
-    pub fn get_mac_of_if_in_network(&self, network: String) -> Option<String> {
+    pub fn mac_in_network(&self, network: String) -> Option<String> {
         let desc = self.xml().unwrap();
         let mut p = Parser::new();
         p.feed_str(&desc);
@@ -93,7 +93,7 @@ impl Domain {
         }
         mac
     }
-    pub fn get_mac_of_ip(&self, ip: &IPv4) -> Option<String> {
+    pub fn mac_of_ip(&self, ip: &IPv4) -> Option<String> {
         use xml::{Event, Parser};
         let desc = self.xml().unwrap();
         let mut p = Parser::new();
@@ -187,7 +187,7 @@ impl Domain {
                     x_dev.tag(xE!("disk", type => "volume", device => "disk"))
                         .tag_stay(xE!("driver", name => "qemu", type => "qed"))
                         .tag_stay(xE!("source",
-                          pool => vol.get_pool().name(),
+                          pool => vol.pool().name(),
                           volume => vol.name()
                         ))
                         .tag_stay(xE!("target", dev => "hda", bus => "ide"));

@@ -19,10 +19,10 @@ impl Volume {
             }
         }
     }
-    pub fn get_path(&self) -> &str {
+    pub fn path(&self) -> &str {
         unsafe { CStr::from_ptr(virStorageVolGetPath(self.raw)).to_str().unwrap() }
     }
-    pub fn get_pool(&self) -> StoragePool {
+    pub fn pool(&self) -> StoragePool {
         StoragePool { raw: unsafe { virStoragePoolLookupByVolume(self.raw) } }
     }
     pub fn ensure(storage_pool: &StoragePool, name: &str) -> Result<Self> {
@@ -59,6 +59,15 @@ impl Volume {
                 }
             };
             Ok(Volume { raw: vol })
+        }
+    }
+    pub fn find(name: &str, storage_pool: &StoragePool) -> Option<Self> {
+        unsafe {
+            match virStorageVolLookupByName(storage_pool.raw(),
+                                                 rawCharPtr!(name)) {
+                p if !p.is_null() => { Some(Volume { raw: p }) },
+                _ => None,
+            }
         }
     }
     pub fn create_descendant(name: &str, storage_pool: &StoragePool, path_disk: &str) -> Volume {

@@ -294,7 +294,7 @@ fn main() {
                                 info!("cluster {}: ok", cluster.name);
                             },
                             Ok(false) => {
-                                info!("cluster {}: failed", cluster.name);
+                                info!("cluster {}: unnecessary to re-run", cluster.name);
                             },
                             Err(e) => {
                                 error!("cluster {} error: {}", cluster.name, e);

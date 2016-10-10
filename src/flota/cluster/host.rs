@@ -32,6 +32,12 @@ impl<'a> Host<'a> {
 
         // vol backed by template's external one
         let path_disk = &template.path_disk;
+        // if residue found, delete it.
+        match Volume::find(&host.hostname,
+                           template.resources.pool().as_ref().unwrap()) {
+            Some(vol) => { try!(vol.delete()); },
+            None => {},
+        }
         let vol = Volume::create_descendant(&host.hostname,
                                             template.resources.pool().as_ref().unwrap(),
                                             &path_disk);
@@ -53,7 +59,7 @@ impl<'a> Host<'a> {
         };
 
         // get mgmt interface's ip address
-        let mgmt_ip = dom.get_ip_in_network(template.resources.network().unwrap()).unwrap();
+        let mgmt_ip = dom.ip_in_network(template.resources.network().unwrap()).unwrap();
 
         // if session seed type is ssh, we update ip
         // because we had not known what management ip it would have.
@@ -98,5 +104,8 @@ impl<'a> Host<'a> {
             domain: dom,
             template: template.clone(),
         })
+    }
+    pub fn shutdown(&self) -> Result<()> {
+        self.domain.destroy()
     }
 }
