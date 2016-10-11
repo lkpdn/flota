@@ -1,7 +1,7 @@
 #![feature(concat_idents,
            custom_attribute,
            inclusive_range_syntax,
-           rustc_macro)]
+           proc_macro)]
 #![recursion_limit = "1024"]
 extern crate ansi_term;
 extern crate bit_vec;
@@ -15,7 +15,6 @@ extern crate git2;
 extern crate libc;
 #[macro_use]
 extern crate log;
-extern crate hyper;
 #[macro_use]
 extern crate lazy_static;
 extern crate nix;
@@ -33,7 +32,6 @@ extern crate time;
 extern crate toml;
 extern crate unqlite;
 extern crate url;
-extern crate uuid;
 extern crate xml;
 
 use getopts::Options;

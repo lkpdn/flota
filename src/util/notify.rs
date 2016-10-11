@@ -1,4 +1,3 @@
-use libc;
 use nix::unistd::{fork, ForkResult, getppid};
 use nix::sys::signal;
 use notify;
