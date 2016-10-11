@@ -1,11 +1,14 @@
 use serde_json;
+use serde_json::value::ToJson;
 use std::collections::HashSet;
 use std::convert::AsRef;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
+use time;
 use toml;
+use unqlite::{Cursor, KV, UnQLite};
 use ::util::errors::*;
 
 macro_rules! unfold {
@@ -58,7 +61,7 @@ macro_rules! unfold {
     }};
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
 // XXX: local/remote choices might probably be sufficient
 pub enum ExecType {
     Console,
@@ -66,7 +69,7 @@ pub enum ExecType {
     Ssh,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
 pub struct Exec {
     /// of enum ExecType
     pub exec_type: ExecType,
@@ -136,7 +139,7 @@ use self::setting::Setting;
 use self::template::Template;
 use self::cluster::Cluster;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RustcEncodable)]
 pub struct Config {
     pub setting: Arc<Setting>,
     pub templates: HashSet<Arc<Template>>,
@@ -152,6 +155,40 @@ impl From<Vec<u8>> for Config {
 }
 
 impl Config {
+    pub fn unqlite() -> UnQLite {
+        UnQLite::create(::consts::CONFIG_HISTORY_DIR
+                        .join("config").as_path().to_str().unwrap())
+    }
+    pub fn get_all() -> Option<Vec<Self>> {
+        Some(vec![ Config::unqlite()
+             .last().unwrap().value().into() ])
+    }
+    pub fn save(&self) -> Result<()> {
+        let now = time::now();
+        Config::unqlite().kv_store(
+            format!("{}", &now.rfc3339()),
+            self.to_json().as_str().unwrap()
+        ).map_err(|e| format!("{}", e).into())
+    }
+    pub fn is_last_saved(&self) -> Result<bool> {
+        if let Some(last) = Config::last_saved() {
+            if last.eq(self) {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err("no saved config at all".into())
+        }
+    }
+    pub fn last_saved() -> Option<Self> {
+        match Config::unqlite().last() {
+            Some(last) => {
+                Some(last.value().into())
+            },
+            None => None,
+        }
+    }
     pub fn from_toml_file(path: &Path) -> Result<Config> {
         let mut file = File::open(path.to_str().unwrap())
             .expect(format!("Cannot open toml file: {}", path.display()).as_ref());

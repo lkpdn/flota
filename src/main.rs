@@ -12,11 +12,14 @@ extern crate env_logger;
 extern crate error_chain;
 extern crate getopts;
 extern crate git2;
+extern crate hyper;
 extern crate libc;
 #[macro_use]
 extern crate log;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate nickel;
 extern crate nix;
 extern crate notify;
 #[macro_use]
@@ -44,6 +47,8 @@ use nix::unistd::{close, dup2, fork, ForkResult, getppid, sleep};
 use std::path::Path;
 use std::process;
 use std::process::Command;
+
+pub mod api;
 
 pub mod consts;
 use consts::*;
@@ -73,7 +78,6 @@ pub mod distro;
 use distro::Distros;
 
 pub mod store;
-use store::ConfigStore;
 
 fn print_usage(opts: Options) {
     let brief = format!("Usage: {}", *PROGNAME);
@@ -118,6 +122,17 @@ fn daemonize() -> Result<()> {
         _ => panic!("failed to daemonize. dup2 failed.")
     }
     Ok(())
+}
+
+fn run_api() -> Result<i32> {
+    match fork().expect("fork failed") {
+        ForkResult::Parent { child } => {
+            Ok(child)
+        },
+        ForkResult::Child => {
+            api::run()
+        }
+    }
 }
 
 extern "C" fn config_reload(_: i32) {
@@ -196,9 +211,8 @@ fn main() {
     // verify environment
     verify_env().unwrap();
 
-    let config_store = store::unqlite_backed::ConfigStore::new(
-        ::consts::CONFIG_HISTORY_DIR.join("hoge").as_path()
-    );
+    // run api
+    run_api().expect("failed to run api");
 
     // outermost loop
     'init: loop {
@@ -207,7 +221,9 @@ fn main() {
         match Config::from_toml_file(Path::new(&config_path)) {
             Ok(config) => {
                 debug!("{:#?}", config);
-                config_store.update(&config).unwrap();
+                if let Ok(false) = config.is_last_saved() {
+                    config.save().expect("cannot save config");
+                }
 
                 // set up main connection
                 let conn = Conn::new(&config.setting.hypervisor);
@@ -308,7 +324,8 @@ fn main() {
                         unsafe { CONFIG_RELOAD = false };
                         match Config::from_toml_file(Path::new(&config_path)) {
                             Ok(ref new_config) => {
-                                if let Ok(true) = config_store.update(&new_config) {
+                                if let Ok(false) = new_config.is_last_saved() {
+                                    new_config.save().expect("cannot save config.");
                                     break 'cycle;
                                 }
                             },

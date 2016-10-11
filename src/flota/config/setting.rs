@@ -2,7 +2,7 @@ use toml;
 use ::consts::*;
 use ::util::ipv4::IPv4;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
 pub struct Setting {
     /// Hypervisor uri to connect.
     /// _no default value_

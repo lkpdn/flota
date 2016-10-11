@@ -12,7 +12,7 @@ enum UnattendedInstallation {
     KickstartFile(PathBuf),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
 pub enum Ingredient {
     /// distro + arch (+ unattended)
     OffTheShelf {
@@ -69,7 +69,7 @@ impl Ingredient {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
 pub struct Template {
     /// Template name.
     pub name: String,

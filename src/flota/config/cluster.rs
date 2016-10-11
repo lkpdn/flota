@@ -9,7 +9,7 @@ use ::util::url::Url;
 use super::Exec;
 use super::template::Template;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
 pub struct HostInterface {
     /// Network interface dev name on guest side.
     pub dev: String,
@@ -28,7 +28,7 @@ impl HostInterface {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
 pub struct Host {
     /// Hostname.
     pub hostname: String,
@@ -119,7 +119,7 @@ impl Host {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
 pub enum WatchPoint {
     Git {
         uri: Url,
@@ -132,7 +132,7 @@ pub enum WatchPoint {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
 pub struct Cluster {
     /// Cluster name arbitrarily chosen.
     pub name: String,
