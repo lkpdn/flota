@@ -9,3 +9,5 @@
 * are all tedious while great care must be taken to prevent severe incidents.
 
 ![fig001](https://github.com/lkpdn/myimgs/blob/master/imgs/flota-fig001.png)
+
+![fig002](https://github.com/lkpdn/myimgs/blob/master/imgs/flota-fig002.png)
