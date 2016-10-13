@@ -1,121 +1,49 @@
-use git2::{Direction, ErrorCode, Repository};
-use serde_json;
-use std::collections::HashMap;
 use std::sync::Arc;
 use ::exec::{ExecResult, Output};
 use ::exec::session::SeedType;
 use ::exec::session::ssh::SessSeedSsh;
-use ::flota::{config, template};
-use ::flota::config::cluster::WatchPoint;
-use ::flota::cluster::host::Host;
-use ::store::{TestResultStore, unqlite_backed};
+use ::flota::config;
+use ::flota::entity::template;
+use ::flota::entity::host::Host;
+use ::flota::Storable;
+use ::flota::test::{Cause, ClusterTestResult, HostTestResult, TestResult};
 use ::util::errors::*;
-use ::util::md5sum::calc_md5;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ClusterTestKey {
-    cluster: config::cluster::Cluster,
-    watchpoints: Vec<(config::cluster::WatchPoint, HashMap<String, Vec<u8>>)>,
-}
-
-impl ClusterTestKey {
-    pub fn new(cluster: &config::cluster::Cluster) -> Self {
-        let mut watchpoints = Vec::new();
-        for watchpoint in cluster.watchpoints.iter() {
-            match watchpoint {
-                &WatchPoint::Git {
-                    ref uri,
-                    ref remote,
-                    ref refs,
-                    ref checkout_dir,
-                } => {
-                    let url = uri.as_str();
-                    let repo = match Repository::clone(url, checkout_dir) {
-                        Ok(repo) => { repo },
-                        Err(ref e) if e.code() == ErrorCode::Exists => {
-                            Repository::open(checkout_dir).expect(
-                                format!("failed to open {:?}", checkout_dir).as_str())
-                        },
-                        Err(e) => panic!("failed to clone: {}", e),
-                    };
-                    let mut rem = repo.find_remote(remote.as_str()).unwrap();
-                    rem.connect(Direction::Fetch).expect(format!(
-                            "failed to connect to {}", remote).as_str());
-                    let ref_commit_ids = rem
-                        .list()
-                        .unwrap()
-                        .iter()
-                        .map(|head| (head.name().to_owned(), head.oid().as_bytes().to_vec()))
-                        .filter(|r1| {
-                            if &refs[..] == &[ "*" ] {
-                                true
-                            } else {
-                                refs.iter().find(|r2| **r2 == r1.0).is_some()
-                            }
-                        })
-                        .collect::<HashMap<_, _>>();
-                    watchpoints.push((
-                        WatchPoint::Git {
-                            uri: uri.clone(),
-                            remote: remote.clone(),
-                            refs: refs.clone(),
-                            checkout_dir: checkout_dir.clone(),
-                        },
-                        ref_commit_ids
-                    ))
-                },
-                &WatchPoint::File {
-                    ref path
-                } => {
-                    let mut map = HashMap::new();
-                    map.insert(path.to_str().unwrap().to_owned(),
-                               calc_md5(path).unwrap().as_bytes().to_vec());
-                    watchpoints.push((
-                        WatchPoint::File {
-                            path: path.clone(),
-                        },
-                        map
-                    ))
-                },
-            }
-        }
-        ClusterTestKey {
-            cluster: cluster.clone(),
-            watchpoints: watchpoints,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TestResult {
-    host_test_results: Vec<ExecResult>,
-    cluster_test_result: Vec<ExecResult>,
-}
-
-impl From<Vec<u8>> for TestResult {
-    fn from(v: Vec<u8>) -> Self {
-        let buf = String::from_utf8(v).unwrap();
-        serde_json::from_str(&buf).unwrap()
-    }
-}
+pub mod watch;
+use self::watch::WatchPointPerception;
 
 pub struct Manager {}
 
 impl Manager {
-    // judge whether or not to (re-)run tests.
-    // if it turns out that we should do so,
-    // returns key
-    //
-    // key: "{config.id}:{cluster.id}:{watchpoints hash}"
-    fn needs_rerun_of_cluster(cluster: &config::cluster::Cluster, store: &unqlite_backed::TestResultStore)
-                              -> Result<(ClusterTestKey, bool)> {
-        let key = ClusterTestKey::new(cluster);
-        match store.find(&key) {
-            Some(_) => Ok((key, false)),
-            None => Ok((key, true)),
+    fn cause_of_next_cluster_run(cluster: &config::cluster::Cluster)
+                              -> Option<Cause> {
+        // if no test fot its config have ever been executed,
+        // it needs to (re-)run tests.
+        let cluster_test_result = ClusterTestResult::init(cluster);
+        match ClusterTestResult::find(cluster_test_result.key()) {
+            None => return Some(Cause::FirstRun),
+            Some(_) => {},
         }
+
+        // if we perceive some watchpoint state have changed since last run,
+        // it needs to re-run test.
+        for watchpoint in &cluster.watchpoints {
+            let current_perception = WatchPointPerception::new(&watchpoint);
+            match WatchPointPerception::last_perception(&watchpoint) {
+                Some(ref w) if w.ne(&current_perception) => {
+                    // XXX: it would be better if we can see all the changes,
+                    //      not only one we first met
+                    return Some(Cause::WatchPoint { ident: w.clone() })
+                },
+                Some(_) => {},
+                None => { unreachable!() }
+            }
+        }
+        None
     }
-    pub fn run_host_test(config: &config::cluster::Host, host: &Host) -> Result<Vec<ExecResult>> {
+    pub fn run_host_test(config: &config::cluster::host::Host,
+                         host: &Host,
+                         test_result: &mut HostTestResult) -> Result<()> {
         // XXX: duplicate code
         let mgmt_ip = host.domain.ip_in_network(host.template.resources.network().unwrap()).unwrap();
         let mut seeds = host.template.session_seeds.clone();
@@ -127,7 +55,6 @@ impl Manager {
             }
         }
 
-        let mut results = Vec::new();
         for tests in vec![
             &config.solo_pre_tests,
             &config.solo_tests,
@@ -146,7 +73,7 @@ impl Manager {
                             Ok(ret) => {
                                 info!("{}", ret);
                                 let passed = ret.satisfy(&expected);
-                                results.push(ExecResult {
+                                test_result.push_result(ExecResult {
                                     host: config.hostname.clone(),
                                     command: one_exec.command.clone(),
                                     expected: expected,
@@ -162,10 +89,11 @@ impl Manager {
                 } else { panic!("would not panic") }
             }
         }
-        Ok(results)
+        Ok(())
     }
-    pub fn run_cluster_test(cluster: &config::cluster::Cluster, hosts: &Vec<Host>) -> Result<Vec<ExecResult>> {
-        let mut results = Vec::new();
+    pub fn run_cluster_test(cluster: &config::cluster::Cluster,
+                            hosts: &Vec<Host>,
+                            test_result: &mut ClusterTestResult) -> Result<()> {
         for tests in vec![
             &cluster.pre_tests,
             &cluster.tests,
@@ -204,7 +132,7 @@ impl Manager {
                                 Ok(ref ret) => {
                                     info!("{}", ret);
                                     let passed = ret.satisfy(&expected);
-                                    results.push(ExecResult {
+                                    test_result.push_result(ExecResult {
                                         host: match one_exec.host {
                                             Some(ref hostname) => { hostname.clone() },
                                             None => { unreachable!() },
@@ -228,34 +156,38 @@ impl Manager {
                 }
             }
         }
-        Ok(results)
+        Ok(())
     }
     pub fn run_cluster<'a>(cluster: &config::cluster::Cluster,
                            templates: &Vec<Arc<template::Template<'a>>>)
                        -> Result<bool> {
-        let store = unqlite_backed::TestResultStore::new(
-            ::consts::DATA_DIR.join("fuga").as_path());
-        match Manager::needs_rerun_of_cluster(&cluster, &store) {
-            Ok((_, false)) => {
+        match Manager::cause_of_next_cluster_run(&cluster) {
+            None => {
                 return Ok(false)
             },
-            Err(e) => {
-                error!("{}", e);
-            },
-            Ok((key, true)) => {
+            Some(ref cause) => {
                 let mut hosts = Vec::new();
-                let mut host_test_results = Vec::new();
-                for host in cluster.hosts.iter() {
+                for host_config in cluster.hosts.iter() {
                     // search for a template matched to the host
-                    let template = match templates.iter().find(|&t| t.name == host.template.name) {
+                    let template = match templates.iter().find(
+                        |&t| t.name == host_config.template.name) {
                         Some(v) => v,
                         None => continue,
                     };
-                    match Host::new(host, &template) {
-                        Ok(h) => {
-                            let result = Manager::run_host_test(host, &h);
-                            host_test_results.append(&mut result.unwrap());
-                            hosts.push(h);
+                    match Host::new(host_config, &template) {
+                        Ok(host) => {
+                            let mut host_test_result = HostTestResult::init(
+                                host_config
+                            );
+                            host_test_result.set_cause(cause);
+                            if let Ok(_) = Manager::run_host_test(
+                                host_config, &host, &mut host_test_result) {
+                                host_test_result.save()
+                                    .expect("failed to save host test result");
+                                hosts.push(host);
+                            } else {
+                                panic!("would not panic")
+                            }
                         },
                         Err(e) => {
                             error!("failed to create host error: {}", e);
@@ -263,15 +195,19 @@ impl Manager {
                         },
                     }
                 }
-                if let Ok(ref result) = Manager::run_cluster_test(&cluster, &hosts) {
-                    let test_result = TestResult {
-                        host_test_results: host_test_results,
-                        cluster_test_result: result.clone(),
-                    };
-                    try!(store.set(&key, &test_result));
-                }
-                for host in hosts.iter() {
-                    host.shutdown();
+                let mut cluster_test_result = ClusterTestResult::init(
+                    cluster
+                );
+                cluster_test_result.set_cause(cause);
+                if let Ok(_) = Manager::run_cluster_test(
+                    cluster, &hosts, &mut cluster_test_result) {
+                    cluster_test_result.save()
+                        .expect("failed to save cluster test result");
+                    for host in hosts.iter() {
+                        host.shutdown();
+                    }
+                } else {
+                    panic!("would not panic")
                 }
             }
         }

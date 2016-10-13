@@ -65,8 +65,9 @@ use util::notify::config_hup;
 pub mod flota;
 use flota::config::*;
 use flota::config::template::Ingredient;
+use flota::entity::template::Template;
 use flota::manager::Manager;
-use flota::template::Template;
+use flota::Storable;
 
 #[macro_use]
 pub mod virt;
@@ -76,8 +77,6 @@ use virt::storage::pool::StoragePool;
 
 pub mod distro;
 use distro::Distros;
-
-pub mod store;
 
 fn print_usage(opts: Options) {
     let brief = format!("Usage: {}", *PROGNAME);

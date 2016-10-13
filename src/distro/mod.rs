@@ -1,6 +1,6 @@
 use std::fmt;
 use ::flota::config;
-use ::flota::config::cluster::Host as HostConfig;
+use ::flota::config::cluster::host::Host as HostConfig;
 use ::exec::session::Session;
 use ::util::errors::*;
 use ::util::url::Url;

@@ -5,7 +5,7 @@ use ::exec::session;
 use ::exec::session::*;
 use ::exec::session::ssh::SessSeedSsh;
 use ::flota::config;
-use ::flota::template;
+use ::flota::entity::template;
 use ::util::errors::*;
 use ::util::update_etc_hosts;
 use ::virt::domain::*;
@@ -19,7 +19,7 @@ pub struct Host<'a> {
 }
 
 impl<'a> Host<'a> {
-    pub fn new(host: &config::cluster::Host, template: &Arc<template::Template<'a>>)
+    pub fn new(host: &config::cluster::host::Host, template: &Arc<template::Template<'a>>)
         -> Result<Self>
     {
         // make sure networks are all available.

@@ -2,7 +2,7 @@ use std::fmt;
 
 pub mod session;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RustcEncodable, Hash)]
 pub struct Output {
     pub stdout: Option<String>,
     pub stderr: Option<String>,
@@ -56,7 +56,7 @@ impl Output {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RustcEncodable, Hash)]
 pub struct ExecResult {
     pub host: String,
     pub command: String,

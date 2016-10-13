@@ -1,10 +1,8 @@
 use std::sync::Arc;
 use ::flota::config;
-use ::flota::template;
+use ::flota::entity::template;
 use ::util::errors::*;
-
-pub mod host;
-use self::host::Host;
+use super::host::Host;
 
 #[derive(Debug)]
 pub struct Cluster<'a> {

@@ -1,6 +1,6 @@
 use ::distro::*;
 use ::exec::session::Session;
-use ::flota::config::cluster::Host as HostConfig;
+use ::flota::config::cluster::host::Host as HostConfig;
 use ::util::errors::*;
 use ::virt::ResourceBlend;
 use ::virt::domain::Domain;

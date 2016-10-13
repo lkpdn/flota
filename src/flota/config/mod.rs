@@ -1,15 +1,15 @@
 use serde_json;
-use serde_json::value::ToJson;
 use std::collections::HashSet;
 use std::convert::AsRef;
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::Path;
+use std::mem;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use time;
 use toml;
-use unqlite::{Cursor, KV, UnQLite};
 use ::util::errors::*;
+use ::flota::Storable;
 
 macro_rules! unfold {
     ( $toml:ident, $key:expr, $ty:tt, optional, $default:expr ) => {{
@@ -144,6 +144,7 @@ pub struct Config {
     pub setting: Arc<Setting>,
     pub templates: HashSet<Arc<Template>>,
     pub clusters: HashSet<Arc<Cluster>>,
+    pub created_at: i64,
 }
 
 // XXX: TryFrom
@@ -154,41 +155,16 @@ impl From<Vec<u8>> for Config {
     }
 }
 
+impl Storable for Config {
+    fn db_path() -> PathBuf {
+        ::consts::CONFIG_HISTORY_DIR.join("config")
+    }
+    fn key(&self) -> Vec<u8> {
+        unsafe { mem::transmute::<i64, [u8; 8]>(self.created_at).to_vec() }
+    }
+}
+
 impl Config {
-    pub fn unqlite() -> UnQLite {
-        UnQLite::create(::consts::CONFIG_HISTORY_DIR
-                        .join("config").as_path().to_str().unwrap())
-    }
-    pub fn get_all() -> Option<Vec<Self>> {
-        Some(vec![ Config::unqlite()
-             .last().unwrap().value().into() ])
-    }
-    pub fn save(&self) -> Result<()> {
-        let now = time::now();
-        Config::unqlite().kv_store(
-            format!("{}", &now.rfc3339()),
-            self.to_json().as_str().unwrap()
-        ).map_err(|e| format!("{}", e).into())
-    }
-    pub fn is_last_saved(&self) -> Result<bool> {
-        if let Some(last) = Config::last_saved() {
-            if last.eq(self) {
-                Ok(true)
-            } else {
-                Ok(false)
-            }
-        } else {
-            Err("no saved config at all".into())
-        }
-    }
-    pub fn last_saved() -> Option<Self> {
-        match Config::unqlite().last() {
-            Some(last) => {
-                Some(last.value().into())
-            },
-            None => None,
-        }
-    }
     pub fn from_toml_file(path: &Path) -> Result<Config> {
         let mut file = File::open(path.to_str().unwrap())
             .expect(format!("Cannot open toml file: {}", path.display()).as_ref());
@@ -242,6 +218,7 @@ impl Config {
             setting: setting,
             templates: templates,
             clusters: clusters,
+            created_at: time::get_time().sec,
         })
     }
 }

@@ -1,6 +1,7 @@
 use nickel::{Nickel, HttpRouter, MediaType};
 use nickel::Mountable;
 use serde_json::value::ToJson;
+use ::flota::Storable;
 use ::flota::config::Config;
 use ::util::errors::*;
 
