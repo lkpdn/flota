@@ -5,7 +5,7 @@ use ::exec::session::ssh::SessSeedSsh;
 use ::flota::config;
 use ::flota::entity::template;
 use ::flota::entity::host::Host;
-use ::flota::Storable;
+use ::flota::{Storable, HistoryStorable};
 use ::flota::test::{Cause, ClusterTestResult, HostTestResult, TestResult};
 use ::util::errors::*;
 
@@ -15,31 +15,43 @@ use self::watch::WatchPointPerception;
 pub struct Manager {}
 
 impl Manager {
+    fn pin_cluster_watchpoints(cluster: &config::cluster::Cluster)
+                               -> Result<()> {
+        for watchpoint in &cluster.watchpoints {
+            let current_perception = WatchPointPerception::new(&watchpoint);
+            // XXX: not transactional
+            let _ = try!(current_perception.update());
+        }
+        Ok(())
+    }
     fn cause_of_next_cluster_run(cluster: &config::cluster::Cluster)
-                              -> Option<Cause> {
+                                 -> Vec<Cause> {
         // if no test fot its config have ever been executed,
         // it needs to (re-)run tests.
         let cluster_test_result = ClusterTestResult::init(cluster);
         match ClusterTestResult::find(cluster_test_result.key()) {
-            None => return Some(Cause::FirstRun),
+            None => {
+                Self::pin_cluster_watchpoints(cluster);
+                return vec![ Cause::FirstRun ]
+            }
             Some(_) => {},
         }
 
         // if we perceive some watchpoint state have changed since last run,
         // it needs to re-run test.
+        let mut causes = vec![];
         for watchpoint in &cluster.watchpoints {
             let current_perception = WatchPointPerception::new(&watchpoint);
             match WatchPointPerception::last_perception(&watchpoint) {
-                Some(ref w) if w.ne(&current_perception) => {
-                    // XXX: it would be better if we can see all the changes,
-                    //      not only one we first met
-                    return Some(Cause::WatchPoint { ident: w.clone() })
+                Some(ref w) if w.eq(&current_perception) => {},
+                _ => {
+                    // XXX:
+                    let _ = current_perception.update();
+                    causes.push(Cause::WatchPoint { ident: current_perception });
                 },
-                Some(_) => {},
-                None => { unreachable!() }
             }
         }
-        None
+        causes
     }
     pub fn run_host_test(config: &config::cluster::host::Host,
                          host: &Host,
@@ -161,55 +173,56 @@ impl Manager {
     pub fn run_cluster<'a>(cluster: &config::cluster::Cluster,
                            templates: &Vec<Arc<template::Template<'a>>>)
                        -> Result<bool> {
-        match Manager::cause_of_next_cluster_run(&cluster) {
-            None => {
-                return Ok(false)
-            },
-            Some(ref cause) => {
-                let mut hosts = Vec::new();
-                for host_config in cluster.hosts.iter() {
-                    // search for a template matched to the host
-                    let template = match templates.iter().find(
-                        |&t| t.name == host_config.template.name) {
-                        Some(v) => v,
-                        None => continue,
-                    };
-                    match Host::new(host_config, &template) {
-                        Ok(host) => {
-                            let mut host_test_result = HostTestResult::init(
-                                host_config
-                            );
-                            host_test_result.set_cause(cause);
-                            if let Ok(_) = Manager::run_host_test(
-                                host_config, &host, &mut host_test_result) {
-                                host_test_result.save()
-                                    .expect("failed to save host test result");
-                                hosts.push(host);
-                            } else {
-                                panic!("would not panic")
-                            }
-                        },
-                        Err(e) => {
-                            error!("failed to create host error: {}", e);
-                            return Err(e.into())
-                        },
+        let causes = Manager::cause_of_next_cluster_run(&cluster);
+        if causes.len() == 0 {
+            return Ok(false)
+        }
+        let mut hosts = Vec::new();
+        for host_config in cluster.hosts.iter() {
+            // search for a template matched to the host
+            let template = match templates.iter().find(
+                |&t| t.name == host_config.template.name) {
+                Some(v) => v,
+                None => continue,
+            };
+            match Host::new(host_config, &template) {
+                Ok(host) => {
+                    let mut host_test_result = HostTestResult::init(
+                        host_config
+                    );
+                    for cause in causes.iter() {
+                        host_test_result.push_cause(cause);
                     }
-                }
-                let mut cluster_test_result = ClusterTestResult::init(
-                    cluster
-                );
-                cluster_test_result.set_cause(cause);
-                if let Ok(_) = Manager::run_cluster_test(
-                    cluster, &hosts, &mut cluster_test_result) {
-                    cluster_test_result.save()
-                        .expect("failed to save cluster test result");
-                    for host in hosts.iter() {
-                        host.shutdown();
+                    if let Ok(_) = Manager::run_host_test(
+                        host_config, &host, &mut host_test_result) {
+                        host_test_result.update()
+                            .expect("failed to update host test result");
+                        hosts.push(host);
+                    } else {
+                        panic!("would not panic")
                     }
-                } else {
-                    panic!("would not panic")
-                }
+                },
+                Err(e) => {
+                    error!("failed to create host error: {}", e);
+                    return Err(e.into())
+                },
             }
+        }
+        let mut cluster_test_result = ClusterTestResult::init(
+            cluster
+        );
+        for cause in causes.iter() {
+            cluster_test_result.push_cause(cause);
+        }
+        if let Ok(_) = Manager::run_cluster_test(
+            cluster, &hosts, &mut cluster_test_result) {
+            cluster_test_result.update()
+                .expect("failed to update cluster test result");
+            for host in hosts.iter() {
+                host.shutdown();
+            }
+        } else {
+            panic!("would not panic")
         }
         Ok(true)
     }

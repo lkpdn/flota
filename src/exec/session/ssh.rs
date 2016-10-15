@@ -54,11 +54,10 @@ impl Session for SessSsh {
 }
 
 impl SessSsh {
-    pub fn new(user: &str, ip: &IPv4, port: i32, priv_key: &Path) -> Box<Self> {
+    pub fn new(user: &str, ip: &IPv4, port: i32, priv_key: &Path) -> Result<Box<Self>> {
         debug!("tcp stream connect: {}:{}", &ip.ip(), port);
-        let tcp = TcpStream::connect(format!("{}:{}",
-                                             &ip.ip(), port).as_str())
-            .unwrap();
+        let tcp = try!(TcpStream::connect(format!("{}:{}",
+                                          &ip.ip(), port).as_str()));
         let mut sess = ssh2::Session::new().unwrap();
         sess.handshake(&tcp).unwrap();
         sess.userauth_pubkey_file(user, None, priv_key, None).unwrap();
@@ -67,10 +66,10 @@ impl SessSsh {
         sess.set_allow_sigpipe(true);
         debug!("new session: {{user: {}, host: {}, priv_key: {}}}",
                user, ip.ip(), priv_key.to_str().unwrap());
-        Box::new(SessSsh {
+        Ok(Box::new(SessSsh {
             session: sess,
             tcp_stream: tcp,
-        })
+        }))
     }
 
     // Update $HOME/.ssh/known_hosts file on host side (where the entire
@@ -133,10 +132,15 @@ impl SessSeedSsh {
 impl SessionSeed for SessSeedSsh {
     fn spawn(&self) -> Result<Box<Session>> {
         // at this moment self.ip must be some.
-        Ok(self::SessSsh::new(&self.user, match self.ip {
-            Some(ref v) => v,
-            None => panic!("would not panic")
-        }, self.port, self.priv_key.as_path()))
+        Ok(try!(
+            self::SessSsh::new(&self.user,
+                               match self.ip {
+                                   Some(ref v) => v,
+                                   None => panic!("would not panic")
+                               },
+                               self.port,
+                               self.priv_key.as_path())
+        ))
     }
     fn seed_type(&self) -> SeedType {
         SeedType::Ssh

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::mem;
 use std::path::{Path, PathBuf};
 use ::flota::config::cluster::watchpoint::WatchPoint;
-use ::flota::{hash, Storable};
+use ::flota::{hash, Storable, HistoryStorable};
 use ::util::md5sum::calc_md5;
 use ::util::url::Url;
 
@@ -24,12 +24,12 @@ pub struct WatchPointPerception {
     pub value: WatchPointPerceptionValue,
 }
 
-impl Storable for WatchPointPerception {
+impl HistoryStorable for WatchPointPerception {
     fn db_path() -> PathBuf {
-        ::consts::CONFIG_HISTORY_DIR.join("watchpoint_perception")
+        ::consts::DATA_DIR.join("watchpoint_perception")
     }
     fn key(&self) -> Vec<u8> {
-        unsafe { mem::transmute::<u64, [u8; 8]>(hash(self)).to_vec() }
+        self.watchpoint_id.clone()
     }
 }
 
@@ -103,5 +103,6 @@ impl WatchPointPerception {
     }
     pub fn last_perception(watchpoint: &WatchPoint) -> Option<Self> {
         WatchPointPerception::find(watchpoint.key())
+            .map(|record| record.last().unwrap().clone())
     }
 }

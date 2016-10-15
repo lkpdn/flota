@@ -49,28 +49,9 @@ impl Cluster {
             Some(&toml::Value::Array(ref tml_watchpoints)) => {
                 let mut watchpoints = Vec::new();
                 for tml_watchpoint in tml_watchpoints {
-                    let ty = unfold!(tml_watchpoint, "type", String);
-                    // WatchPoint::Git
-                    if ty == "git" {
-                        if let Some(&toml::Value::Array(ref refs)) = tml_watchpoint.lookup("refs") {
-                            watchpoints.push(WatchPoint::Git {
-                                uri: unfold!(tml_watchpoint, "uri", Url),
-                                remote: unfold!(tml_watchpoint, "remote", String, optional, "origin".to_string()),
-                                refs: refs.iter().map(|s| s.as_str().unwrap().to_owned())
-                                    .collect::<Vec<_>>(),
-                                checkout_dir: unfold!(tml_watchpoint, "checkout_dir", PathBuf),
-                            });
-                        } else {
-                            return Err("watchpoint type git requires branches array".into())
-                        }
-                    // WatchPoint::File
-                    } else if ty == "file" {
-                        watchpoints.push(WatchPoint::File {
-                            path: unfold!(tml_watchpoint, "path", PathBuf),
-                        });
-                    } else {
-                        return Err(format!("unsupported watchpoint type: {}", ty).into())
-                    }
+                    watchpoints.push(
+                        WatchPoint::from_toml(tml_watchpoint).unwrap()
+                    )
                 }
                 watchpoints
             },

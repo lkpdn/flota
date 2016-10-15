@@ -72,25 +72,37 @@ impl<'a> Host<'a> {
             }
         }
 
-        let session = session::try_spawn(&seeds, vec![SeedType::Ssh]).unwrap();
-        if let Err(_) = template.distro.deref().adapt_network_state(
-                &host, unsafe { &*Box::into_raw(session) }, &dom, &template.resources) {
-            // XXX: if we seem to have failed to adapt network state,
-            //      we try to connect again. max retry count is ten, sleep
-            //      interval is 3sec.
-            for i in 0..10 {
-                match session::try_spawn(&seeds, vec![SeedType::Ssh]) {
-                    Err(_) if i >= 9 => {
+        // wait at most 60 seconds until guest-side sshd boots up.
+        'try_adaption: for i in 0..20 {
+            match session::try_spawn(&seeds, vec![SeedType::Ssh]) {
+                Ok(session) => {
+                    if let Err(_) = template.distro.deref()
+                        .adapt_network_state(
+                            &host, unsafe { &*Box::into_raw(session) },
+                            &dom, &template.resources
+                        ) {
+                        // XXX: if we seem to have failed to adapt network state,
+                        //      we try to connect again. max retry count is ten, sleep
+                        //      interval is 3sec.
+                        'wait_wakeup: for i in 0..10 {
+                            match session::try_spawn(&seeds, vec![SeedType::Ssh]) {
+                                Err(_) if i >= 9 => { break 'wait_wakeup },
+                                Ok(_) => { break 'try_adaption },
+                                _ => {
+                                    sleep(3);
+                                    continue
+                                }
+                            }
+                        }
                         return Err("network adaption failed".into())
-                    },
-                    Ok(_) => { break },
-                    _ => {
-                        sleep(3);
-                        continue
                     }
+                    break 'try_adaption
+                },
+                _ => {
+                    sleep(3);
+                    continue
                 }
             }
-
         }
 
         // update host-side /etc/hosts

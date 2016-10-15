@@ -155,9 +155,16 @@ impl Domain {
                                                       .unwrap()
                                                       .as_ptr()) {
                 p if !p.is_null() => {
-                    if virDomainReboot(p, 0) != 0 {
-                        return Err("domain already exists but failed to reboot".into())
-                    } else { p }
+                    if virDomainIsActive(p) == 1 {
+                        if virDomainReboot(p, 0) != 0 {
+                            return Err("domain already exists but failed to reboot".into())
+                        }
+                        p
+                    } else if virDomainCreate(p) == 0 {
+                        p
+                    } else {
+                        return Err("domain already exists but failed to start".into())
+                    }
                 },
                 _ => {
                     let mem_mb = 768;

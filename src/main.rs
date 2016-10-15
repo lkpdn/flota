@@ -105,8 +105,8 @@ fn daemonize() -> Result<()> {
         process::exit(1);
     }
     match (fs::OpenOptions::new().read(true).write(true).open("/dev/null"),
-           fs::OpenOptions::new().read(true).write(true).create(true).open(LOGFILE.as_os_str()),
-           fs::OpenOptions::new().read(true).write(true).create(true).open(LOGERROR.as_os_str())) {
+           fs::OpenOptions::new().read(true).append(true).create(true).open(LOGFILE.as_os_str()),
+           fs::OpenOptions::new().read(true).append(true).create(true).open(LOGERROR.as_os_str())) {
         (Ok(n), Ok(f), Ok(e)) => {
             let n_raw = n.as_raw_fd();
             let f_raw = f.as_raw_fd();
@@ -211,7 +211,8 @@ fn main() {
     verify_env().unwrap();
 
     // run api
-    run_api().expect("failed to run api");
+    WAIT_FOR.lock().unwrap().push(
+        run_api().expect("failed to run api"));
 
     // outermost loop
     'init: loop {
@@ -220,8 +221,11 @@ fn main() {
         match Config::from_toml_file(Path::new(&config_path)) {
             Ok(config) => {
                 debug!("{:#?}", config);
-                if let Ok(false) = config.is_last_saved() {
-                    config.save().expect("cannot save config");
+                match config.is_last_saved() {
+                    Ok(false) | Err(_) => {
+                        config.save().expect("cannot save config");
+                    },
+                    _ => {},
                 }
 
                 // set up main connection

@@ -4,7 +4,7 @@ use ::exec::ExecResult;
 use ::flota::config::cluster::Cluster;
 use ::flota::config::cluster::host::Host;
 use ::flota::manager::watch::WatchPointPerception;
-use ::flota::Storable;
+use ::flota::HistoryStorable;
 
 // this indicated a cause to run tests
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RustcEncodable, Hash)]
@@ -16,20 +16,20 @@ pub enum Cause {
 }
 
 pub trait TestResult {
-    fn set_cause(&mut self, cause: &Cause) where Self: Sized;
+    fn push_cause(&mut self, cause: &Cause) where Self: Sized;
     fn push_result(&mut self, result: ExecResult) where Self: Sized;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RustcEncodable, Hash)]
 pub struct HostTestResult {
     pub host: Host,
-    pub cause: Option<Cause>,
+    pub causes: Vec<Cause>,
     pub results: Vec<ExecResult>,
 }
 
 impl TestResult for HostTestResult {
-    fn set_cause(&mut self, cause: &Cause) where Self: Sized {
-        self.cause = Some(cause.clone());
+    fn push_cause(&mut self, cause: &Cause) where Self: Sized {
+        self.causes.push(cause.clone());
     }
     fn push_result(&mut self, result: ExecResult) where Self: Sized {
         self.results.push(result);
@@ -40,12 +40,9 @@ impl HostTestResult {
     pub fn init(host: &Host) -> Self {
         HostTestResult {
             host: host.clone(),
+            causes: vec![],
             results: vec![],
-            cause: None,
         }
-    }
-    fn set_cause(&mut self, cause: &Cause) where Self: Sized {
-        self.cause = Some(cause.clone());
     }
 }
 
@@ -56,36 +53,26 @@ impl From<Vec<u8>> for HostTestResult {
     }
 }
 
-impl Storable for HostTestResult {
+impl HistoryStorable for HostTestResult {
     fn db_path() -> PathBuf {
-        ::consts::CONFIG_HISTORY_DIR.join("host_test_results")
+        ::consts::DATA_DIR.join("host_test_results")
     }
     fn key(&self) -> Vec<u8> {
-        match self.cause {
-            Some(Cause::WatchPoint { ref ident }) => {
-                let mut key: Vec<u8> = "watchpoint:".into();
-                key.append(&mut ident.watchpoint_id.clone());
-                key
-            },
-            // in case no watchpoint is set
-            _ => {
-                format!("host:{}", self.host.id())
-                    .as_bytes().to_vec()
-            },
-        }
+        format!("host:{}", self.host.id())
+            .as_bytes().to_vec()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RustcEncodable, Hash)]
 pub struct ClusterTestResult {
     pub cluster: Cluster,
-    pub cause: Option<Cause>,
+    pub causes: Vec<Cause>,
     pub results: Vec<ExecResult>,
 }
 
 impl TestResult for ClusterTestResult {
-    fn set_cause(&mut self, cause: &Cause) where Self: Sized {
-        self.cause = Some(cause.clone());
+    fn push_cause(&mut self, cause: &Cause) where Self: Sized {
+        self.causes.push(cause.clone());
     }
     fn push_result(&mut self, result: ExecResult) where Self: Sized {
         self.results.push(result);
@@ -96,7 +83,7 @@ impl ClusterTestResult {
     pub fn init(cluster: &Cluster) -> Self {
         ClusterTestResult {
             cluster: cluster.clone(),
-            cause: None,
+            causes: vec![],
             results: vec![],
         }
     }
@@ -109,22 +96,12 @@ impl From<Vec<u8>> for ClusterTestResult {
     }
 }
 
-impl Storable for ClusterTestResult {
+impl HistoryStorable for ClusterTestResult {
     fn db_path() -> PathBuf {
-        ::consts::CONFIG_HISTORY_DIR.join("cluster_test_results")
+        ::consts::DATA_DIR.join("cluster_test_results")
     }
     fn key(&self) -> Vec<u8> {
-        match self.cause {
-            Some(Cause::WatchPoint { ref ident }) => {
-                let mut key: Vec<u8> = "watchpoint:".into();
-                key.append(&mut ident.watchpoint_id.clone());
-                key
-            },
-            // in case no watchpoint is set
-            _ => {
-                format!("cluster:{}", self.cluster.id())
-                    .as_bytes().to_vec()
-            },
-        }
+        format!("cluster:{}", self.cluster.id())
+            .as_bytes().to_vec()
     }
 }

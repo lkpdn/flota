@@ -157,7 +157,7 @@ impl From<Vec<u8>> for Config {
 
 impl Storable for Config {
     fn db_path() -> PathBuf {
-        ::consts::CONFIG_HISTORY_DIR.join("config")
+        ::consts::DATA_DIR.join("config")
     }
     fn key(&self) -> Vec<u8> {
         unsafe { mem::transmute::<i64, [u8; 8]>(self.created_at).to_vec() }
