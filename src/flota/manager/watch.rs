@@ -1,10 +1,8 @@
 use git2::{Direction, ErrorCode, Repository};
 use serde_json;
-use std::collections::HashMap;
-use std::mem;
 use std::path::{Path, PathBuf};
 use ::flota::config::cluster::watchpoint::WatchPoint;
-use ::flota::{hash, Storable, HistoryStorable};
+use ::flota::{Storable, HistoryStorable};
 use ::util::md5sum::calc_md5;
 use ::util::url::Url;
 

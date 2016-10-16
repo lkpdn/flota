@@ -1,7 +1,8 @@
 use serde_json::value::{from_value, ToJson, Value};
 use serde::de::Deserialize;
 use serde::ser::Serialize;
-use std::hash::{Hash, Hasher, SipHasher};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::str::FromStr;
 use unqlite::{Cursor, KV, UnQLite};
@@ -115,7 +116,47 @@ pub trait HistoryStorable : Clone + From<Vec<u8>> + ToJson +
 }
 
 pub fn hash<T: Hash>(t: &T) -> u64 {
-    let mut s = SipHasher::new();
+    let mut s = DefaultHasher::new();
     t.hash(&mut s);
     s.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json;
+    use std::mem;
+    use std::path::PathBuf;
+    use super::*;
+
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RustcEncodable, Hash)]
+    pub struct TestStruct {
+        pub field1: String,
+    }
+    impl From<Vec<u8>> for TestStruct {
+        fn from(v: Vec<u8>) -> Self {
+            let buf = String::from_utf8(v).unwrap();
+            serde_json::from_str(&buf).unwrap()
+        }
+    }
+    impl Storable for TestStruct {
+        fn db_path() -> PathBuf {
+            PathBuf::from("/tmp/test")
+        }
+        fn key(&self) -> Vec<u8> {
+            unsafe { mem::transmute::<i64, [u8; 8]>(self.created_at).to_vec() }
+        }
+    }
+    #[test]
+    fn test_save_and_get() {
+        let mut s = String::with_capacity(10240);
+        for _ in 0..10240 {
+            s.push_str("x");
+        }
+        let test1 = TestStruct { field1: s };
+        test1.save();
+        let records = TestStruct::get_all();
+        for record in records.iter() {
+            assert_eq!(*record, test1.clone());
+        }
+    }
 }

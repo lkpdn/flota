@@ -1,11 +1,8 @@
-use serde_json::value::ToJson;
 use std::collections::HashSet;
-use std::path::PathBuf;
 use std::sync::Arc;
 use toml;
 use ::flota::hash;
 use ::util::errors::*;
-use ::util::url::Url;
 
 use super::Exec;
 use super::template::Template;

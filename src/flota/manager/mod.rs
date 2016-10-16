@@ -5,7 +5,7 @@ use ::exec::session::ssh::SessSeedSsh;
 use ::flota::config;
 use ::flota::entity::template;
 use ::flota::entity::host::Host;
-use ::flota::{Storable, HistoryStorable};
+use ::flota::HistoryStorable;
 use ::flota::test::{Cause, ClusterTestResult, HostTestResult, TestResult};
 use ::util::errors::*;
 
@@ -25,14 +25,14 @@ impl Manager {
         Ok(())
     }
     fn cause_of_next_cluster_run(cluster: &config::cluster::Cluster)
-                                 -> Vec<Cause> {
+                                 -> Result<Vec<Cause>> {
         // if no test fot its config have ever been executed,
         // it needs to (re-)run tests.
         let cluster_test_result = ClusterTestResult::init(cluster);
         match ClusterTestResult::find(cluster_test_result.key()) {
             None => {
-                Self::pin_cluster_watchpoints(cluster);
-                return vec![ Cause::FirstRun ]
+                try!(Self::pin_cluster_watchpoints(cluster));
+                return Ok(vec![ Cause::FirstRun ])
             }
             Some(_) => {},
         }
@@ -51,7 +51,7 @@ impl Manager {
                 },
             }
         }
-        causes
+        Ok(causes)
     }
     pub fn run_host_test(config: &config::cluster::host::Host,
                          host: &Host,
@@ -173,7 +173,7 @@ impl Manager {
     pub fn run_cluster<'a>(cluster: &config::cluster::Cluster,
                            templates: &Vec<Arc<template::Template<'a>>>)
                        -> Result<bool> {
-        let causes = Manager::cause_of_next_cluster_run(&cluster);
+        let causes = try!(Manager::cause_of_next_cluster_run(&cluster));
         if causes.len() == 0 {
             return Ok(false)
         }
@@ -219,7 +219,7 @@ impl Manager {
             cluster_test_result.update()
                 .expect("failed to update cluster test result");
             for host in hosts.iter() {
-                host.shutdown();
+                try!(host.shutdown());
             }
         } else {
             panic!("would not panic")

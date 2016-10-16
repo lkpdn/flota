@@ -73,7 +73,7 @@ impl<'a> Host<'a> {
         }
 
         // wait at most 60 seconds until guest-side sshd boots up.
-        'try_adaption: for i in 0..20 {
+        'try_adaption: for _ in 0..20 {
             match session::try_spawn(&seeds, vec![SeedType::Ssh]) {
                 Ok(session) => {
                     if let Err(_) = template.distro.deref()

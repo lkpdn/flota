@@ -5,7 +5,8 @@ use notify::{RecommendedWatcher, Watcher};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use std::sync::mpsc::channel;
+use std::process;
+use std::sync::mpsc::{channel, RecvError};
 
 use ::util::errors::*;
 
@@ -22,6 +23,10 @@ pub fn config_hup(path: &Path) -> Result<i32> {
                     Ok(notify::Event { path: _, op: _ }) => {
                         let _ = signal::kill(getppid(), signal::SIGHUP);
                     }
+                    Err(e) if e == RecvError => {
+                        error!("{}", RecvError);
+                        process::exit(0);
+                    },
                     Err(e) => {
                         error!("{}", e);
                     }

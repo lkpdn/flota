@@ -1,4 +1,3 @@
-use serde_json::value::ToJson;
 use std::collections::HashSet;
 use std::sync::Arc;
 use toml;
