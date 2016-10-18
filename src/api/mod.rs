@@ -1,7 +1,6 @@
 use nickel::{Nickel, HttpRouter, MediaType};
 use nickel::Mountable;
 use serde_json::value::ToJson;
-use ::flota::Storable;
 use ::flota::config::Config;
 use ::util::errors::*;
 
@@ -12,7 +11,8 @@ pub fn run() -> Result<i32> {
     // [GET] /configs
     router.get("/configs", middleware! {|_, mut res|
         res.set(MediaType::Json);
-        Config::get_all().unwrap().to_json().as_str().unwrap()
+        //Config::get_all().unwrap().to_json().as_str().unwrap()
+        unimplemented!()
     });
     // [GET] /configs/:id
     server.get("/configs/:id", middleware! {|_, mut res|

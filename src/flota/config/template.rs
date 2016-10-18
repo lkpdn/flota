@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use toml;
 use ::consts::*;
+use ::flota::Cypherable;
 use ::util::errors::*;
 use ::util::url::Url;
 use super::setting::Setting;
@@ -12,7 +13,7 @@ enum UnattendedInstallation {
     KickstartFile(PathBuf),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Ingredient {
     /// distro + arch (+ unattended)
     OffTheShelf {
@@ -69,7 +70,7 @@ impl Ingredient {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Template {
     /// Template name.
     pub name: String,
@@ -86,6 +87,25 @@ pub struct Template {
     pub mgmt_user_ssh_public_key: PathBuf,
     /// Arc for global setting
     pub setting: Arc<Setting>,
+}
+
+impl Cypherable for Template {
+    fn cypher_ident(&self) -> String {
+        format!("Template {{ name: '{name}',
+                             arch: '{arch}',
+                             ingredient: '{ingredient:?}',
+                             ks: '{ks:?}',
+                             mgmt_user: '{mgmt_user}',
+                             mgmt_user_ssh_private_key: '{ssh_priv_key}',
+                             mgmt_user_ssh_public_key: '{ssh_pub_key}' }}",
+               name = self.name,
+               arch = self.arch,
+               ingredient = self.ingredient,
+               ks = self.ks,
+               mgmt_user = self.mgmt_user,
+               ssh_priv_key = self.mgmt_user_ssh_private_key.to_str().unwrap(),
+               ssh_pub_key = self.mgmt_user_ssh_public_key.to_str().unwrap())
+    }
 }
 
 impl Template {

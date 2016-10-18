@@ -1,12 +1,11 @@
 use git2::{Direction, ErrorCode, Repository};
-use serde_json;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use ::flota::Cypherable;
 use ::flota::config::cluster::watchpoint::WatchPoint;
-use ::flota::{Storable, HistoryStorable};
 use ::util::md5sum::calc_md5;
 use ::util::url::Url;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RustcEncodable, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum WatchPointPerceptionValue {
     Git {
         ref_commit_ids: Vec<(String, Vec<u8>)>,
@@ -16,25 +15,15 @@ pub enum WatchPointPerceptionValue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RustcEncodable, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct WatchPointPerception {
-    pub watchpoint_id: Vec<u8>,
     pub value: WatchPointPerceptionValue,
 }
 
-impl HistoryStorable for WatchPointPerception {
-    fn db_path() -> PathBuf {
-        ::consts::DATA_DIR.join("watchpoint_perception")
-    }
-    fn key(&self) -> Vec<u8> {
-        self.watchpoint_id.clone()
-    }
-}
-
-impl From<Vec<u8>> for WatchPointPerception {
-    fn from(v: Vec<u8>) -> Self {
-        let buf = String::from_utf8(v).unwrap();
-        serde_json::from_str(&buf).unwrap()
+impl Cypherable for WatchPointPerception {
+    fn cypher_ident(&self) -> String {
+        format!("WatchPointPerception {{ value: '{:?}' }}",
+                self.value)
     }
 }
 
@@ -42,7 +31,6 @@ impl WatchPointPerception {
     pub fn new(watchpoint: &WatchPoint) -> Self {
         let perception = Self::perceive(watchpoint);
         WatchPointPerception {
-            watchpoint_id: watchpoint.key(),
             value: perception,
         }
     }
@@ -52,6 +40,7 @@ impl WatchPointPerception {
         let repo = match Repository::clone(url, checkout_dir) {
             Ok(repo) => { repo },
             Err(ref e) if e.code() == ErrorCode::Exists => {
+                // XXX: re-clone if it's broken
                 Repository::open(checkout_dir).expect(
                     format!("failed to open {:?}", checkout_dir).as_str())
             },
@@ -98,9 +87,5 @@ impl WatchPointPerception {
                 Self::perceive_file(path)
             }
         }
-    }
-    pub fn last_perception(watchpoint: &WatchPoint) -> Option<Self> {
-        WatchPointPerception::find(watchpoint.key())
-            .map(|record| record.last().unwrap().clone())
     }
 }

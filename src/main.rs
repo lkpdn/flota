@@ -1,4 +1,5 @@
 #![feature(concat_idents,
+           core_intrinsics,
            custom_attribute,
            inclusive_range_syntax,
            proc_macro)]
@@ -24,7 +25,8 @@ extern crate nix;
 extern crate notify;
 #[macro_use]
 extern crate quick_error;
-extern crate rustc_serialize;
+#[macro_use]
+extern crate rusted_cypher;
 extern crate ssh2;
 #[macro_use]
 extern crate serde_derive;
@@ -33,7 +35,6 @@ extern crate serde_json;
 extern crate term;
 extern crate time;
 extern crate toml;
-extern crate unqlite;
 extern crate url;
 extern crate xml;
 
@@ -62,12 +63,12 @@ pub mod util;
 use util::errors::*;
 use util::notify::config_hup;
 
+#[macro_use]
 pub mod flota;
 use flota::config::*;
 use flota::config::template::Ingredient;
 use flota::entity::template::Template;
 use flota::manager::Manager;
-use flota::Storable;
 
 #[macro_use]
 pub mod virt;
@@ -83,6 +84,7 @@ fn print_usage(opts: Options) {
     print!("{}", opts.usage(&brief));
 }
 
+const NEO4J_ENDPOINT : &'static str = "http://neo4j:neo4j@localhost:7474/db/data/";
 static mut CONFIG_RELOAD: bool = false;
 static mut SIGTERM_RECVED: bool = false;
 lazy_static! {
@@ -220,14 +222,6 @@ fn main() {
         // read toml
         match Config::from_toml_file(Path::new(&config_path)) {
             Ok(config) => {
-                debug!("{:#?}", config);
-                match config.is_last_saved() {
-                    Ok(false) | Err(_) => {
-                        config.save().expect("cannot save config");
-                    },
-                    _ => {},
-                }
-
                 // set up main connection
                 let conn = Conn::new(&config.setting.hypervisor);
 
@@ -325,16 +319,8 @@ fn main() {
                     sleep(5);
                     if unsafe { CONFIG_RELOAD } {
                         unsafe { CONFIG_RELOAD = false };
-                        match Config::from_toml_file(Path::new(&config_path)) {
-                            Ok(ref new_config) => {
-                                if let Ok(false) = new_config.is_last_saved() {
-                                    new_config.save().expect("cannot save config.");
-                                    break 'cycle;
-                                }
-                            },
-                            Err(e) => {
-                                error!("{}", e);
-                            }
+                        if let Ok(_) = Config::from_toml_file(Path::new(&config_path)) {
+                            break 'cycle;
                         }
                     }
                 }

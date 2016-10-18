@@ -1,7 +1,4 @@
 use bit_vec::BitVec;
-use rustc_serialize::Encodable;
-use rustc_serialize::Encoder;
-use std::result;
 use std::fmt;
 use std::mem;
 
@@ -15,11 +12,6 @@ pub struct IPv4 {
 impl fmt::Display for IPv4 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}/{}", self.ip(), self.mask_bit())
-    }
-}
-impl Encodable for IPv4 {
-    fn encode<S: Encoder>(&self, s: &mut S) -> result::Result<(), S::Error> {
-        s.emit_str(format!("{}", self).as_ref())
     }
 }
 impl IPv4 {

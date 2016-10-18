@@ -1,13 +1,11 @@
-use serde_json;
-use std::mem;
 use std::path::PathBuf;
 use toml;
 
-use ::flota::{hash, Storable};
+use ::flota::Cypherable;
 use ::util::errors::*;
 use ::util::url::Url;
 
-#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum WatchPoint {
     Git {
         uri: Url,
@@ -20,19 +18,26 @@ pub enum WatchPoint {
     }
 }
 
-impl From<Vec<u8>> for WatchPoint {
-    fn from(v: Vec<u8>) -> Self {
-        let buf = String::from_utf8(v).unwrap();
-        serde_json::from_str(&buf).unwrap()
-    }
-}
-
-impl Storable for WatchPoint {
-    fn db_path() -> PathBuf {
-        ::consts::DATA_DIR.join("watchpoint")
-    }
-    fn key(&self) -> Vec<u8> {
-        unsafe { mem::transmute::<u64, [u8; 8]>(hash(self)).to_vec() }
+impl Cypherable for WatchPoint {
+    fn cypher_ident(&self) -> String {
+        match *self {
+            WatchPoint::Git { ref uri, ref remote, ref refs, ref checkout_dir } => {
+                format!("WatchPoint {{ type: 'Git',
+                                       uri: '{}',
+                                       remote: '{}',
+                                       refs: '{}',
+                                       checkout_dir: '{}' }}",
+                        uri.as_str(),
+                        remote.as_str(),
+                        refs.join(", "),
+                        checkout_dir.to_str().unwrap())
+            },
+            WatchPoint::File { ref path } => {
+                format!("WatchPoint {{ type: 'File',
+                                       path: '{}' }}",
+                        path.to_str().unwrap())
+            }
+        }
     }
 }
 

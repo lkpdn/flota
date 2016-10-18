@@ -1,8 +1,9 @@
 use std::fmt;
+use ::flota::Cypherable;
 
 pub mod session;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RustcEncodable, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct Output {
     pub stdout: Option<String>,
     pub stderr: Option<String>,
@@ -56,11 +57,26 @@ impl Output {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RustcEncodable, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct ExecResult {
     pub host: String,
     pub command: String,
     pub expected: Output,
     pub result: Output,
     pub passed: bool,
+}
+
+impl Cypherable for ExecResult {
+    fn cypher_ident(&self) -> String {
+        format!("ExecResult {{ host: '{host}',
+                               command: '{command}',
+                               expected: '{expected:?}',
+                               result: '{result:?}',
+                               passed: '{passed}' }}",
+                host = self.host,
+                command = self.command,
+                expected = self.expected,
+                result = self.result,
+                passed = self.passed)
+    }
 }

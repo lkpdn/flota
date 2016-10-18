@@ -1,7 +1,5 @@
-use rustc_serialize::Encodable;
-use rustc_serialize::Encoder;
-use serde::de;
-use serde::ser;
+use serde;
+use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use std::ops::Deref;
 use url;
 use url::Url as U;
@@ -9,36 +7,30 @@ use url::Url as U;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Url(U);
 
-impl Encodable for Url {
-    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
-        s.emit_str(self.0.as_str())
-    }
-}
-
-impl ser::Serialize for Url {
+impl Serialize for Url {
     fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
-        where S: ser::Serializer {
+        where S: Serializer {
         serializer.serialize_str(self.as_str())
     }
 }
 
-impl de::Deserialize for Url {
+impl Deserialize for Url {
     fn deserialize<D>(deserializer: &mut D) -> Result<Url, D::Error>
-        where D: de::Deserializer {
+        where D: Deserializer {
         deserializer.deserialize_str(UrlVisitor)
     }
 }
 
 struct UrlVisitor;
 
-impl de::Visitor for UrlVisitor {
+impl serde::de::Visitor for UrlVisitor {
     type Value = Url;
     fn visit_str<E>(&mut self, v: &str) -> Result<Self::Value, E>
-        where E: de::Error {
+        where E: serde::Error {
         Ok(Url::parse(v).unwrap())
     }
     fn visit_string<E>(&mut self, v: String) -> Result<Self::Value, E>
-        where E: de::Error {
+        where E: serde::Error {
         Ok(Url::parse(&v).unwrap())
     }
 }
@@ -59,11 +51,9 @@ impl Url {
 #[cfg(test)]
 mod tests {
     use toml::{Encoder, Value};
-    use rustc_serialize::Encodable;
     use url;
     use super::Url;
 
-    #[derive(RustcEncodable)]
     struct TestUrlStruct { url: Url }
     #[test]
     fn test_url() {

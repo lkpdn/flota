@@ -1,12 +1,12 @@
+use rusted_cypher::graph::GraphClient;
 use std::sync::Arc;
 use ::exec::{ExecResult, Output};
 use ::exec::session::SeedType;
 use ::exec::session::ssh::SessSeedSsh;
-use ::flota::config;
+use ::flota::{config, Cypherable};
 use ::flota::entity::template;
 use ::flota::entity::host::Host;
-use ::flota::HistoryStorable;
-use ::flota::test::{Cause, ClusterTestResult, HostTestResult, TestResult};
+use ::flota::test::Cause;
 use ::util::errors::*;
 
 pub mod watch;
@@ -17,47 +17,59 @@ pub struct Manager {}
 impl Manager {
     fn pin_cluster_watchpoints(cluster: &config::cluster::Cluster)
                                -> Result<()> {
-        for watchpoint in &cluster.watchpoints {
-            let current_perception = WatchPointPerception::new(&watchpoint);
-            // XXX: not transactional
-            let _ = try!(current_perception.update());
+        // prepare and start transaction
+        let graph = GraphClient::connect(::NEO4J_ENDPOINT).unwrap();
+        let mut transaction = graph.cypher().transaction();
+        transaction.add_statement("MATCH (n: TRANSACTION) RETURN n");
+        let (mut transaction, _) = transaction.begin().unwrap();
+
+        // update perception linked-lists
+        for ref watchpoint in &cluster.watchpoints {
+            let current_perception = WatchPointPerception::new(watchpoint);
+            try!(save_child_ll!(&mut transaction, watchpoint, current_perception, "IS_RESULT_OF")
+                                .map(|_| ()));
         }
+
+        // commit transaction
+        transaction.commit().unwrap();
         Ok(())
     }
     fn cause_of_next_cluster_run(cluster: &config::cluster::Cluster)
                                  -> Result<Vec<Cause>> {
-        // if no test fot its config have ever been executed,
-        // it needs to (re-)run tests.
-        let cluster_test_result = ClusterTestResult::init(cluster);
-        match ClusterTestResult::find(cluster_test_result.key()) {
-            None => {
-                try!(Self::pin_cluster_watchpoints(cluster));
-                return Ok(vec![ Cause::FirstRun ])
-            }
-            Some(_) => {},
+        if let Ok(true) = cluster.is_first_run() {
+            try!(Self::pin_cluster_watchpoints(cluster));
+            return Ok(vec![ Cause::FirstRun ])
         }
 
         // if we perceive some watchpoint state have changed since last run,
         // it needs to re-run test.
         let mut causes = vec![];
-        for watchpoint in &cluster.watchpoints {
-            let current_perception = WatchPointPerception::new(&watchpoint);
-            match WatchPointPerception::last_perception(&watchpoint) {
-                Some(ref w) if w.eq(&current_perception) => {},
+        // prepare and start transaction
+        let graph = GraphClient::connect(::NEO4J_ENDPOINT).unwrap();
+        let mut transaction = graph.cypher().transaction();
+        transaction.add_statement("MATCH (n: TRANSACTION) RETURN n");
+        let (mut transaction, _) = transaction.begin().unwrap();
+        for ref watchpoint in &cluster.watchpoints {
+            let current_perception = WatchPointPerception::new(watchpoint);
+            match is_tail!(watchpoint, current_perception) {
+                Ok(true) => {},
                 _ => {
                     // XXX:
-                    let _ = current_perception.update();
+                    try!(save_child_ll!(&mut transaction, watchpoint, &current_perception,
+                                        "IS_RESULT_OF").map(|_| ()));
                     causes.push(Cause::WatchPoint { ident: current_perception });
                 },
             }
         }
+        try!(transaction.commit());
         Ok(causes)
     }
     pub fn run_host_test(config: &config::cluster::host::Host,
                          host: &Host,
-                         test_result: &mut HostTestResult) -> Result<()> {
+                         causes: &Vec<Cause>) -> Result<()> {
         // XXX: duplicate code
-        let mgmt_ip = host.domain.ip_in_network(host.template.resources.network().unwrap()).unwrap();
+        let mgmt_ip = host.domain.ip_in_network(host.template.resources.network().unwrap())
+                                 .unwrap();
         let mut seeds = host.template.session_seeds.clone();
         for mut seed in seeds.iter_mut() {
             if seed.seed_type() == SeedType::Ssh {
@@ -85,13 +97,31 @@ impl Manager {
                             Ok(ret) => {
                                 info!("{}", ret);
                                 let passed = ret.satisfy(&expected);
-                                test_result.push_result(ExecResult {
+                                let result = ExecResult {
                                     host: config.hostname.clone(),
                                     command: one_exec.command.clone(),
                                     expected: expected,
                                     result: ret.clone(),
                                     passed: passed,
-                                });
+                                };
+                                // prepare and start transaction
+                                let graph = GraphClient::connect(::NEO4J_ENDPOINT).unwrap();
+                                let mut transaction = graph.cypher().transaction();
+                                transaction.add_statement("MATCH (n: TRANSACTION) RETURN n");
+                                let (mut transaction, _) = transaction.begin().unwrap();
+
+                                try!(save_child_ll!(&mut transaction, one_exec,
+                                                    result, "IS_RESULT_OF")
+                                     .map(|_| ()));
+                                for cause in causes.iter() {
+                                    if let Cause::WatchPoint { ref ident } = *cause {
+                                        try!(save_child_ll!(&mut transaction, ident,
+                                                            result, "DUE_TO")
+                                            .map(|_| ()));
+                                    }
+                                }
+                                // commit transaction
+                                try!(transaction.commit());
                             },
                             Err(e) => {
                                 error!("{}", e);
@@ -105,7 +135,7 @@ impl Manager {
     }
     pub fn run_cluster_test(cluster: &config::cluster::Cluster,
                             hosts: &Vec<Host>,
-                            test_result: &mut ClusterTestResult) -> Result<()> {
+                            causes: &Vec<Cause>) -> Result<()> {
         for tests in vec![
             &cluster.pre_tests,
             &cluster.tests,
@@ -144,7 +174,7 @@ impl Manager {
                                 Ok(ref ret) => {
                                     info!("{}", ret);
                                     let passed = ret.satisfy(&expected);
-                                    test_result.push_result(ExecResult {
+                                    let result = ExecResult {
                                         host: match one_exec.host {
                                             Some(ref hostname) => { hostname.clone() },
                                             None => { unreachable!() },
@@ -153,7 +183,26 @@ impl Manager {
                                         expected: expected,
                                         result: ret.clone(),
                                         passed: passed,
-                                    });
+                                    };
+                                    // prepare and start transaction
+                                    let graph = GraphClient::connect(::NEO4J_ENDPOINT).unwrap();
+                                    let mut transaction = graph.cypher().transaction();
+                                    transaction.add_statement("MATCH (n: TRANSACTION) RETURN n");
+                                    let (mut transaction, _) = transaction.begin().unwrap();
+
+                                    try!(save_child_ll!(&mut transaction, one_exec,
+                                                        result, "IS_RESULT_OF")
+                                        .map(|_| ()));
+                                    for cause in causes.iter() {
+                                        if let Cause::WatchPoint { ref ident } = *cause {
+                                            try!(save_child_ll!(&mut transaction, ident,
+                                                                result, "DUE_TO")
+                                                 .map(|_| ()));
+                                        }
+                                    }
+
+                                    // commit transaction
+                                    try!(transaction.commit());
                                 },
                                 Err(e) => {
                                     error!("{}", e);
@@ -187,16 +236,10 @@ impl Manager {
             };
             match Host::new(host_config, &template) {
                 Ok(host) => {
-                    let mut host_test_result = HostTestResult::init(
-                        host_config
-                    );
-                    for cause in causes.iter() {
-                        host_test_result.push_cause(cause);
-                    }
-                    if let Ok(_) = Manager::run_host_test(
-                        host_config, &host, &mut host_test_result) {
-                        host_test_result.update()
-                            .expect("failed to update host test result");
+                    if let Ok(_) = Manager::run_host_test(host_config,
+                                                          &host,
+                                                          &causes) {
+                        // for cluster tests later
                         hosts.push(host);
                     } else {
                         panic!("would not panic")
@@ -208,16 +251,10 @@ impl Manager {
                 },
             }
         }
-        let mut cluster_test_result = ClusterTestResult::init(
-            cluster
-        );
-        for cause in causes.iter() {
-            cluster_test_result.push_cause(cause);
-        }
-        if let Ok(_) = Manager::run_cluster_test(
-            cluster, &hosts, &mut cluster_test_result) {
-            cluster_test_result.update()
-                .expect("failed to update cluster test result");
+        if let Ok(_) = Manager::run_cluster_test(cluster,
+                                                 &hosts,
+                                                 &causes) {
+            // all done. shutdown hosts
             for host in hosts.iter() {
                 try!(host.shutdown());
             }

@@ -1,13 +1,14 @@
+use rusted_cypher::graph::GraphClient;
 use std::collections::HashSet;
 use std::sync::Arc;
 use toml;
-use ::flota::hash;
+use ::flota::{hash, Cypherable};
 use ::flota::config::Exec;
 use ::flota::config::template::Template;
 use ::util::errors::*;
 use ::util::ipv4::IPv4;
 
-#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct HostInterface {
     /// Network interface dev name on guest side.
     pub dev: String,
@@ -26,7 +27,7 @@ impl HostInterface {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Host {
     /// Hostname.
     pub hostname: String,
@@ -50,8 +51,62 @@ pub struct Host {
     pub template: Arc<Template>,
 }
 
+impl Cypherable for Host {
+    fn cypher_ident(&self) -> String {
+        format!("Host {{ hostname: '{hostname}',
+                         interfaces: '{interfaces:?}',
+                         destroy_when_finished: '{destroy_when_finished}',
+                         persistent: '{persistent}' }}",
+               hostname = self.hostname,
+               interfaces = self.interfaces,
+               destroy_when_finished = self.destroy_when_finished,
+               persistent = self.persistent)
+    }
+}
+
 impl Host {
-    pub fn from_toml(tml: &toml::Value, templates: &HashSet<Arc<Template>>) -> Result<Host> {
+    fn save(&self) -> Result<()> {
+        // prepare and start transaction
+        let graph = GraphClient::connect(::NEO4J_ENDPOINT).unwrap();
+        let mut transaction = graph.cypher().transaction();
+        transaction.add_statement("MATCH (n: TRANSACTION) RETURN n");
+        let (mut transaction, _) = transaction.begin().unwrap();
+
+        // save template
+        if let Err(e) = save_child_rel!(&mut transaction, self, self.template, "BACKED_BY") {
+            error!("{}", e);
+            try!(transaction.rollback());
+            return Err("failed to save Host".into());
+        }
+
+        // save tests
+        for ref solo_pre_test in self.solo_pre_tests.iter() {
+            if let Err(e) = save_child_rel!(&mut transaction, self, solo_pre_test, "EXEC") {
+                error!("{}", e);
+                try!(transaction.rollback());
+                return Err("failed to save Host".into());
+            }
+        }
+        for ref solo_test in self.solo_tests.iter() {
+            if let Err(e) = save_child_rel!(&mut transaction, self, solo_test, "EXEC") {
+                error!("{}", e);
+                try!(transaction.rollback());
+                return Err("failed to save Host".into());
+            }
+        }
+        for ref solo_post_test in self.solo_post_tests.iter() {
+            if let Err(e) = save_child_rel!(&mut transaction, self, solo_post_test, "EXEC") {
+                error!("{}", e);
+                try!(transaction.rollback());
+                return Err("failed to save Host".into());
+            }
+        }
+
+        // commit transaction
+        transaction.commit().map(|_| ()).map_err(|e| e.into())
+    }
+
+    fn from_toml_inner(tml: &toml::Value, templates: &HashSet<Arc<Template>>) -> Result<Host> {
         let hostname = unfold!(tml, "hostname", String);
         // XXX: we have a reference to wholly cloned template Arc Vec
         //      until all but one survivor chosen will drop when returning from this func.
@@ -114,6 +169,15 @@ impl Host {
             persistent: persistent,
             template: template.clone(),
         })
+    }
+    pub fn from_toml(tml: &toml::Value, templates: &HashSet<Arc<Template>>) -> Result<Host> {
+        match Self::from_toml_inner(tml, templates) {
+            Ok(host) => {
+                host.save().unwrap();
+                Ok(host)
+            },
+            Err(e) => Err(e),
+        }
     }
     pub fn id(&self) -> u64 {
         hash(self)

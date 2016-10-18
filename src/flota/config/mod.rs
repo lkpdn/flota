@@ -1,15 +1,12 @@
-use serde_json;
 use std::collections::HashSet;
 use std::convert::AsRef;
 use std::fs::File;
 use std::io::prelude::*;
-use std::mem;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
-use time;
 use toml;
 use ::util::errors::*;
-use ::flota::Storable;
+use ::flota::Cypherable;
 
 macro_rules! unfold {
     ( $toml:ident, $key:expr, $ty:tt, optional, $default:expr ) => {{
@@ -61,7 +58,7 @@ macro_rules! unfold {
     }};
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 // XXX: local/remote choices might probably be sufficient
 pub enum ExecType {
     Console,
@@ -69,7 +66,7 @@ pub enum ExecType {
     Ssh,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, RustcEncodable, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Exec {
     /// of enum ExecType
     pub exec_type: ExecType,
@@ -88,6 +85,25 @@ pub struct Exec {
     /// and if this is set true, all the following
     /// executions would be skipped on an unexpecte result.
     pub abort_on_failure: bool,
+}
+
+impl Cypherable for Exec {
+    fn cypher_ident(&self) -> String {
+        format!("Exec {{ exec_type: '{exec_type:?}',
+                         host: '{host:?}',
+                         command: '{command}',
+                         expect_stdout: '{expect_stdout:?}',
+                         expect_stderr: '{expect_stderr:?}',
+                         expect_status: '{expect_status:?}',
+                         abort_on_failure: '{abort_on_failure}' }}",
+                exec_type = self.exec_type,
+                host = self.host,
+                command = self.command,
+                expect_stdout = self.expect_stdout,
+                expect_stderr = self.expect_stderr,
+                expect_status = self.expect_status,
+                abort_on_failure = self.abort_on_failure)
+    }
 }
 
 impl Exec {
@@ -139,29 +155,11 @@ use self::setting::Setting;
 use self::template::Template;
 use self::cluster::Cluster;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RustcEncodable)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     pub setting: Arc<Setting>,
     pub templates: HashSet<Arc<Template>>,
     pub clusters: HashSet<Arc<Cluster>>,
-    pub created_at: i64,
-}
-
-// XXX: TryFrom
-impl From<Vec<u8>> for Config {
-    fn from(v: Vec<u8>) -> Self {
-        let buf = String::from_utf8(v).unwrap();
-        serde_json::from_str(&buf).unwrap()
-    }
-}
-
-impl Storable for Config {
-    fn db_path() -> PathBuf {
-        ::consts::DATA_DIR.join("config")
-    }
-    fn key(&self) -> Vec<u8> {
-        unsafe { mem::transmute::<i64, [u8; 8]>(self.created_at).to_vec() }
-    }
 }
 
 impl Config {
@@ -218,7 +216,6 @@ impl Config {
             setting: setting,
             templates: templates,
             clusters: clusters,
-            created_at: time::get_time().sec,
         })
     }
 }
