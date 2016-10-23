@@ -5,7 +5,7 @@ use ::flota::config::cluster::watchpoint::WatchPoint;
 use ::util::md5sum::calc_md5;
 use ::util::url::Url;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone)]
 pub enum WatchPointPerceptionValue {
     Git {
         ref_commit_ids: Vec<(String, Vec<u8>)>,
@@ -15,7 +15,7 @@ pub enum WatchPointPerceptionValue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone)]
 pub struct WatchPointPerception {
     pub value: WatchPointPerceptionValue,
 }

@@ -3,7 +3,7 @@ use ::flota::Cypherable;
 
 pub mod session;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Output {
     pub stdout: Option<String>,
     pub stderr: Option<String>,
@@ -57,7 +57,7 @@ impl Output {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone)]
 pub struct ExecResult {
     pub host: String,
     pub command: String,

@@ -5,7 +5,7 @@ use ::flota::Cypherable;
 use ::util::errors::*;
 use ::util::url::Url;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum WatchPoint {
     Git {
         uri: Url,

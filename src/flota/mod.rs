@@ -5,7 +5,9 @@ use std::intrinsics;
 pub trait Cypherable {
     fn label(&self) -> String {
         unsafe {
-            intrinsics::type_name::<Self>().to_string()
+            intrinsics::type_name::<Self>()
+                .split(':').last().unwrap()
+                .to_string()
         }
     }
     fn cypher_ident(&self) -> String;
@@ -26,30 +28,28 @@ macro_rules! save_child_rel {
 
 macro_rules! save_child_ll {
     ( $tx:expr, $parent:expr, $child:expr, $rel:tt ) => {{
-        match $tx.exec(
-            format!("MERGE (p: {})
-                     MERGE (c: {})-[:{}]->(p)",
-                    $parent.cypher_ident(),
-                    $child.cypher_ident(),
-                    $rel,
+        try!($tx.exec(
+            format!("MERGE (p: {p})
+                     MERGE (c: {c})
+                     MERGE (c)-[ptr:{rel}]->(p)
+                     WITH p, c
+                     MATCH (p)-[ptr:TAIL]->(tail:{tail})
+                     DELETE ptr
+                     MERGE (c)-[:PREV]->(tail)",
+                    p = $parent.cypher_ident(),
+                    c = $child.cypher_ident(),
+                    rel = $rel,
+                    tail = $child.label()
             ).as_ref()
-        ) {
-            Ok(ref result) if result.rows().count() > 0 => {
-                $tx.exec(
-                    format!("MATCH (c: {})
-                             MATCH (p: {})-[ptr:TAIL]->(tail:{})
-                             DELETE ptr
-                             MERGE (p)-[:TAIL]->(c)
-                             MERGE (c)-[:PREV]->(tail)",
-                            $child.cypher_ident(),
-                            $parent.cypher_ident(),
-                            $child.label()
-                    ).as_ref()
-                ).map(|_| true)
-            },
-            Ok(_) => Ok(false),
-            Err(e) => Err(e),
-        }
+        ));
+        $tx.exec(
+            format!("MATCH (p: {p})
+                     MATCH (c: {c})
+                     MERGE (p)-[:TAIL]->(c)",
+                    p = $parent.cypher_ident(),
+                    c = $child.cypher_ident()
+            ).as_ref()
+        ).map(|_| true)
     }}
 }
 
@@ -57,7 +57,7 @@ macro_rules! is_tail {
     ( $parent:expr, $child:expr ) => {{
         let graph = GraphClient::connect(::NEO4J_ENDPOINT).unwrap();
         graph.cypher().exec(
-            format!("MATCH (c: {})<-[:TAIL]-(p: {}) RETURN u",
+            format!("MATCH (c: {})<-[:TAIL]-(p: {}) RETURN c",
                    $child.cypher_ident(),
                    $parent.cypher_ident(),
             ).as_ref()

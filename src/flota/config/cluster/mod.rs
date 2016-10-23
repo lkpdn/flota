@@ -14,7 +14,7 @@ use self::host::Host;
 pub mod watchpoint;
 use self::watchpoint::WatchPoint;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Cluster {
     /// Cluster name arbitrarily chosen.
     pub name: String,

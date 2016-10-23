@@ -1,7 +1,7 @@
 use ::flota::manager::watch::WatchPointPerception;
 
 // this indicated a cause to run tests
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug)]
 pub enum Cause {
     FirstRun,
     WatchPoint {

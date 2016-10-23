@@ -58,7 +58,7 @@ macro_rules! unfold {
     }};
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 // XXX: local/remote choices might probably be sufficient
 pub enum ExecType {
     Console,
@@ -66,7 +66,7 @@ pub enum ExecType {
     Ssh,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Exec {
     /// of enum ExecType
     pub exec_type: ExecType,
@@ -155,7 +155,7 @@ use self::setting::Setting;
 use self::template::Template;
 use self::cluster::Cluster;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct Config {
     pub setting: Arc<Setting>,
     pub templates: HashSet<Arc<Template>>,

@@ -8,7 +8,7 @@ use ::flota::config::template::Template;
 use ::util::errors::*;
 use ::util::ipv4::IPv4;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct HostInterface {
     /// Network interface dev name on guest side.
     pub dev: String,
@@ -27,7 +27,7 @@ impl HostInterface {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Host {
     /// Hostname.
     pub hostname: String,

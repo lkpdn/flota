@@ -26,7 +26,7 @@ impl Manager {
         // update perception linked-lists
         for ref watchpoint in &cluster.watchpoints {
             let current_perception = WatchPointPerception::new(watchpoint);
-            try!(save_child_ll!(&mut transaction, watchpoint, current_perception, "IS_RESULT_OF")
+            try!(save_child_ll!(&mut transaction, watchpoint, current_perception, "IS_SNAPSHOT_OF")
                                 .map(|_| ()));
         }
 
