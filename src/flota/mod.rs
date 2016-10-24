@@ -34,6 +34,7 @@ macro_rules! save_child_ll {
                      MERGE (c)-[ptr:{rel}]->(p)
                      WITH p, c
                      MATCH (p)-[ptr:TAIL]->(tail:{tail})
+                     WHERE NOT id(tail) = id(c)
                      DELETE ptr
                      MERGE (c)-[:PREV]->(tail)",
                     p = $parent.cypher_ident(),

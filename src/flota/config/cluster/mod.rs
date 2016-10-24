@@ -107,7 +107,7 @@ impl Cluster {
         graph.cypher().exec(
             format!("MATCH (self: {})-[:EXEC]->(t: Exec)<-[:IS_RESULT_OF]-(res: ExecResult)
                      RETURN res", self.cypher_ident()).as_ref()
-        ).map(|r| r.rows().count() > 0).map_err(|e| e.into())
+        ).map(|r| r.rows().count() == 0).map_err(|e| e.into())
     }
     fn from_toml_inner(tml: &toml::Value, templates: &HashSet<Arc<Template>>) -> Result<Cluster> {
         let name = tml.lookup("name").map(|val| val.as_str().unwrap()).unwrap();

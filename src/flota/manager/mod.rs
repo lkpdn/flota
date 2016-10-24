@@ -56,7 +56,7 @@ impl Manager {
                 _ => {
                     // XXX:
                     try!(save_child_ll!(&mut transaction, watchpoint, &current_perception,
-                                        "IS_RESULT_OF").map(|_| ()));
+                                        "IS_SNAPSHOT_OF").map(|_| ()));
                     causes.push(Cause::WatchPoint { ident: current_perception });
                 },
             }
