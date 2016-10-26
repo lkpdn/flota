@@ -78,8 +78,8 @@ pub struct Distros;
 impl Distros {
     pub fn search(ident: &str, arch: &str) -> Box<Distro> {
         match (ident, arch) {
-            ("centos6", "x86_64") => Box::new(centos::release_6::x86_64::CentOS6_x8664 {}),
-            ("opensuse13", "x86_64") => Box::new(opensuse::release_13::x86_64::OpenSUSE13_x8664 {}),
+            ("centos6", "x86_64") => Box::new(centos::release_6::x86_64::CentOS6_x8664::new()),
+            ("opensuse13", "x86_64") => Box::new(opensuse::release_13::x86_64::OpenSUSE13_x8664::new()),
             _ => unimplemented!(),
         }
     }

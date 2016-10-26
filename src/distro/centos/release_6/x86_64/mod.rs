@@ -12,13 +12,16 @@ use url::Url;
 use xml;
 
 use ::distro;
-use ::distro::{UnattendedInstallation, UnattendedInstallationParams};
+use ::distro::*;
 use ::distro::centos::KSFloppy;
 use ::distro::centos::release_6::CentOS6;
+use ::exec::session::Session;
 use ::flota::config;
+use ::flota::config::cluster::host::Host as HostConfig;
 use ::util::*;
 use ::util::errors::*;
 use ::util::notify::tailf_background;
+use ::virt::ResourceBlend;
 use ::virt::conn::Conn;
 use ::virt::domain::Domain;
 use ::virt::network::Network;
@@ -93,9 +96,34 @@ fn download_initrd(local_path: &Path) -> Result<()> {
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone)]
-pub struct CentOS6_x8664;
+pub struct CentOS6_x8664 {
+    release: CentOS6,
+}
 
-impl CentOS6 for CentOS6_x8664 {}
+impl CentOS6_x8664 {
+    pub fn new() -> Self {
+        CentOS6_x8664 {
+            release: CentOS6::new(),
+        }
+    }
+}
+
+impl InvasiveAdaption for CentOS6_x8664 {
+    fn adapt_network_state(&self,
+                           host: &HostConfig,
+                           sess: &Session,
+                           domain: &Domain,
+                           template: &ResourceBlend)
+                           -> Result<()> {
+        self.release.adapt_network_state(host, sess, domain, template)
+    }
+}
+
+impl UnattendedInstallation for CentOS6_x8664 {
+    fn unattended_script(&self, params: &UnattendedInstallationParams) -> String {
+        self.release.unattended_script(params)
+    }
+}
 
 impl distro::Base for CentOS6_x8664 {
     fn distro(&self) -> String {

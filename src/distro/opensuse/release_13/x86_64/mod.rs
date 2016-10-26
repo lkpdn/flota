@@ -12,13 +12,16 @@ use url::Url;
 use xml;
 
 use ::distro;
-use ::distro::{UnattendedInstallation, UnattendedInstallationParams};
+use ::distro::*;
 use ::distro::opensuse::YastFlash;
 use ::distro::opensuse::release_13::OpenSUSE13;
+use ::exec::session::Session;
 use ::flota::config;
+use ::flota::config::cluster::host::Host as HostConfig;
 use ::util::*;
 use ::util::errors::*;
 use ::util::notify::tailf_background;
+use ::virt::ResourceBlend;
 use ::virt::conn::Conn;
 use ::virt::domain::Domain;
 use ::virt::network::Network;
@@ -93,9 +96,34 @@ fn download_initrd(local_path: &Path) -> Result<()> {
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone)]
-pub struct OpenSUSE13_x8664;
+pub struct OpenSUSE13_x8664 {
+    release: OpenSUSE13,
+}
 
-impl OpenSUSE13 for OpenSUSE13_x8664 {}
+impl OpenSUSE13_x8664 {
+    pub fn new() -> Self {
+        OpenSUSE13_x8664 {
+            release: OpenSUSE13::new(),
+        }
+    }
+}
+
+impl InvasiveAdaption for OpenSUSE13_x8664 {
+    fn adapt_network_state(&self,
+                           host: &HostConfig,
+                           sess: &Session,
+                           domain: &Domain,
+                           template: &ResourceBlend)
+                           -> Result<()> {
+        self.release.adapt_network_state(host, sess, domain, template)
+    }
+}
+
+impl UnattendedInstallation for OpenSUSE13_x8664 {
+    fn unattended_script(&self, params: &UnattendedInstallationParams) -> String {
+        self.release.unattended_script(params)
+    }
+}
 
 impl distro::Base for OpenSUSE13_x8664 {
     fn distro(&self) -> String {

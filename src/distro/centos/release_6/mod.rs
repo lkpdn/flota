@@ -6,9 +6,16 @@ use ::virt::ResourceBlend;
 use ::virt::domain::Domain;
 pub mod x86_64;
 
-pub trait CentOS6 {}
+#[derive(Debug, Clone)]
+pub struct CentOS6 {}
 
-impl<T: CentOS6> InvasiveAdaption for T {
+impl CentOS6 {
+    pub fn new() -> Self {
+        CentOS6 {}
+    }
+}
+
+impl InvasiveAdaption for CentOS6 {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn adapt_network_state(&self,
                            host: &HostConfig,
@@ -84,7 +91,7 @@ impl<T: CentOS6> InvasiveAdaption for T {
     }
 }
 
-impl<T: CentOS6> UnattendedInstallation for T {
+impl UnattendedInstallation for CentOS6 {
     fn unattended_script(&self, params: &UnattendedInstallationParams) -> String {
         format!("
 install

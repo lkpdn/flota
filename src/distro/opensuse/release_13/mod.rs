@@ -6,9 +6,16 @@ use ::virt::ResourceBlend;
 use ::virt::domain::Domain;
 pub mod x86_64;
 
-pub trait OpenSUSE13 {}
+#[derive(Debug, Clone)]
+pub struct OpenSUSE13 {}
 
-impl<T: OpenSUSE13> InvasiveAdaption for T {
+impl OpenSUSE13 {
+    pub fn new() -> Self {
+        OpenSUSE13 {}
+    }
+}
+
+impl InvasiveAdaption for OpenSUSE13 {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn adapt_network_state(&self,
                            host: &HostConfig,
@@ -21,7 +28,7 @@ impl<T: OpenSUSE13> InvasiveAdaption for T {
     }
 }
 
-impl<T: OpenSUSE13> UnattendedInstallation for T {
+impl UnattendedInstallation for OpenSUSE13 {
     fn unattended_script(&self, params: &UnattendedInstallationParams) -> String {
         format!("
         <?xml version='1.0'?>
