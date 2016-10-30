@@ -1,11 +1,17 @@
 # flota (wip)
 
 * personal infrastructure CI tool
+  - automated hosts provisioning and cluster test execution
+  - wide range of choice for guest environment through libvirt
+  - flexible integration with tools such as puppet, chef, ansible, serverspec, etc.
 
-* tasks such as:
-  * setting up OS, middlewares and applications for each environment (dev, test, staging, production, etc.)
-  * testing the whole cluster works fine as expected
-  * applying changes on some configurations for each environment and again, test them
-* are all tedious while great care must be taken to prevent severe incidents.
+## Installation
 
-![fig001](https://github.com/lkpdn/myimgs/blob/master/imgs/flota-fig001.png)
+```
+$ cargo build
+```
+
+## System requirements
+
+* libvirt
+* Neo4j
