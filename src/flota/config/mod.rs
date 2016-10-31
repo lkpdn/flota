@@ -125,7 +125,7 @@ impl Exec {
                 abort_on_failure: abort_on_failure
             }),
             "local" => Ok(Exec {
-                exec_type: ExecType::Console,
+                exec_type: ExecType::Local,
                 host: Some("localhost".to_string()),
                 command: command,
                 expect_stdout: expect_stdout,
